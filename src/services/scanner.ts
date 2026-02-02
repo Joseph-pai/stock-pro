@@ -1,8 +1,8 @@
 import { FinMindClient } from '@/lib/finmind';
 import { evaluateStock } from './engine';
-import { StockData, InstitutionalData, AnalysisResult } from '@/types';
+import { AnalysisResult, StockData } from '@/types';
+import { format, subDays, isWeekend } from 'date-fns';
 
-// Helper to group array by key
 const groupBy = <T>(arr: T[], key: keyof T): Record<string, T[]> => {
     return arr.reduce((acc, item) => {
         const k = String(item[key]);
@@ -13,63 +13,74 @@ const groupBy = <T>(arr: T[], key: keyof T): Record<string, T[]> => {
 };
 
 export const ScannerService = {
-    /**
-     * Scan the market for breakout stocks.
-     * @param dates Array of date strings 'yyyy-mm-dd', latest last. Requires at least 20 days.
-     */
     scanMarket: async (dates: string[]) => {
-        console.log(`Starting scan for ${dates.length} days...`);
+        // Stage 1: Get the latest trading day data
+        console.log('Fetching latest market snapshot...');
+        let latestData: StockData[] = [];
 
-        // 1. Fetch Data in Parallel (Chunked to avoid rate limits if any, though FinMind is generous with token)
-        // We need Prices for all dates
-        const pricePromises = dates.map(date => FinMindClient.getDailyStats({ date }));
-        // We need Inst for last 3 days only (for optimization)
-        // Actually engine needs 3 days check.
-        const instDates = dates.slice(-3);
-        const instPromises = instDates.map(date => FinMindClient.getInstitutional({ date }));
+        // Try the last 5 days to find the most recent trading day
+        for (let i = 0; i < 5; i++) {
+            const date = dates[dates.length - 1 - i];
+            if (!date) continue;
 
-        const [pricesResults, instResults] = await Promise.all([
-            Promise.all(pricePromises.map(p => p.catch(e => { console.error('Price Fetch Fail', e.message); return []; }))),
-            Promise.all(instPromises.map(p => p.catch(e => { console.error('Inst Fetch Fail', e.message); return []; })))
-        ]);
-
-        // Flatten and Filter out empty
-        const allPrices = pricesResults.flat() as StockData[];
-        const allInsts = instResults.flat() as InstitutionalData[];
-
-        if (allPrices.length === 0) {
-            throw new Error(`FinMind API returned no price data for the requested dates. Check Token and API status.`);
-        }
-
-        // 2. Group by Stock ID
-        const pricesByStock = groupBy(allPrices, 'stock_id');
-        const instsByStock = groupBy(allInsts, 'stock_id');
-
-        // 3. Analyze each stock
-        const results: AnalysisResult[] = [];
-
-        for (const stockId in pricesByStock) {
-            const stockPrices = pricesByStock[stockId].sort((a, b) => a.date.localeCompare(b.date));
-            const stockInsts = instsByStock[stockId] || [];
-
-            if (stockPrices.length === 0) continue;
-
-            const latest = stockPrices[stockPrices.length - 1];
-            if (latest.close < 5) continue;
-
-            const result = evaluateStock(stockId, { prices: stockPrices, insts: stockInsts });
-
-            if (result) {
-                // Only keep interesting results? Or all?
-                // Keep if Score > 0.5 or has Tags
-                if (result.score > 0.5 || result.tags.length > 0) {
-                    results.push(result);
-                }
+            const data = await FinMindClient.getDailyStats({ date });
+            if (data.length > 500) { // Significant number of stocks means it's a trading day
+                latestData = data;
+                console.log(`Using ${date} as the latest trading day. Found ${data.length} stocks.`);
+                break;
             }
         }
 
-        // 4. Sort and Return Top 20
+        if (latestData.length === 0) {
+            throw new Error('Could not find any recent trading data in the last 5 days. Verify API Token and market status.');
+        }
+
+        // Stage 2: Identifying Candidates (Broad Filter)
+        // Criteria: Volume > 1000 samples (liquidity) and positive change
+        console.log('Filtering candidates...');
+        const candidates = latestData.filter(s => s.trading_volume > 2000 && s.close > s.open);
+
+        // Take top 100 stocks by volume to avoid too many history requests
+        const topCandidates = candidates
+            .sort((a, b) => b.trading_volume - a.trading_volume)
+            .slice(0, 100);
+
+        console.log(`Identified ${topCandidates.length} potential breakout candidates.`);
+
+        // Stage 3: Fetch history for top candidates
+        const startDate = dates[0];
+        const results: AnalysisResult[] = [];
+
+        // Fetch histories in chunks to stay under timeout/rate limits
+        const chunkSize = 20;
+        for (let i = 0; i < topCandidates.length; i += chunkSize) {
+            const chunk = topCandidates.slice(i, i + chunkSize);
+            console.log(`Processing history chunk ${Math.floor(i / chunkSize) + 1}...`);
+
+            const historyPromises = chunk.map(c =>
+                Promise.all([
+                    FinMindClient.getDailyStats({ stockId: c.stock_id, startDate }),
+                    FinMindClient.getInstitutional({ stockId: c.stock_id, startDate })
+                ]).then(([prices, insts]) => ({ stockId: c.stock_id, prices, insts }))
+            );
+
+            const chunkResults = await Promise.all(historyPromises);
+
+            for (const { stockId, prices, insts } of chunkResults) {
+                if (prices.length < 20) continue; // Need enough days for MA20
+
+                const result = evaluateStock(stockId, { prices, insts });
+                if (result && (result.score > 0.4 || result.tags.length > 0)) {
+                    results.push(result);
+                }
+            }
+
+            // Short delay to avoid hitting rate limits too hard? 
+            // In serverless we want to finish fast, but 100ms is safe.
+            await new Promise(r => setTimeout(r, 100));
+        }
+
         results.sort((a, b) => b.score - a.score);
-        return results.slice(0, 50); // Return top 50, UI shows 20?
+        return results.slice(0, 50);
     }
 };
