@@ -25,13 +25,14 @@ export const FinMindClient = {
             const res = await client.get<FinMindResponse<StockData>>('', { params });
 
             if (!res.data || res.data.status !== 200) {
-                console.error(`FinMind API Error [Price]: Status=${res.data?.status}, Msg=${res.data?.msg || 'No msg'}`);
-                return [];
+                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${res.data?.msg || 'No response'}`);
             }
             return res.data.data || [];
         } catch (error: any) {
-            console.error(`FinMind Network Error [Price]: ${error.message}`);
-            return [];
+            if (error.response) {
+                throw new Error(`API ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+            }
+            throw error;
         }
     },
 
@@ -48,13 +49,14 @@ export const FinMindClient = {
             const res = await client.get<FinMindResponse<InstitutionalData>>('', { params });
 
             if (!res.data || res.data.status !== 200) {
-                console.error(`FinMind API Error [Inst]: Status=${res.data?.status}, Msg=${res.data?.msg || 'No msg'}`);
-                return [];
+                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${res.data?.msg || 'No response'}`);
             }
             return res.data.data || [];
         } catch (error: any) {
-            console.error(`FinMind Network Error [Inst]: ${error.message}`);
-            return [];
+            if (error.response) {
+                throw new Error(`API ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+            }
+            throw error;
         }
     },
 

@@ -17,22 +17,29 @@ export const ScannerService = {
         // Stage 1: Get the latest trading day data
         console.log('Fetching latest market snapshot...');
         let latestData: StockData[] = [];
+        const attempts: string[] = [];
 
         // Try the last 5 days to find the most recent trading day
         for (let i = 0; i < 5; i++) {
             const date = dates[dates.length - 1 - i];
             if (!date) continue;
 
-            const data = await FinMindClient.getDailyStats({ date });
-            if (data.length > 500) { // Significant number of stocks means it's a trading day
-                latestData = data;
-                console.log(`Using ${date} as the latest trading day. Found ${data.length} stocks.`);
-                break;
+            try {
+                const data = await FinMindClient.getDailyStats({ date });
+                if (data.length > 500) { // Significant number of stocks means it's a trading day
+                    latestData = data;
+                    console.log(`Using ${date} as the latest trading day. Found ${data.length} stocks.`);
+                    break;
+                } else {
+                    attempts.push(`${date}: Only ${data.length} records found.`);
+                }
+            } catch (error: any) {
+                attempts.push(`${date}: ${error.message}`);
             }
         }
 
         if (latestData.length === 0) {
-            throw new Error('Could not find any recent trading data in the last 5 days. Verify API Token and market status.');
+            throw new Error(`Market data not found. Attempts: [${attempts.join(' | ')}]. Server Date: ${new Date().toISOString()}`);
         }
 
         // Stage 2: Identifying Candidates (Broad Filter)
