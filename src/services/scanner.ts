@@ -45,11 +45,11 @@ export const ScannerService = {
         console.log('Filtering candidates...');
         const candidates = latestData.filter(s => s.Trading_Volume > 2000 && s.close > s.open);
 
-        // Take top 50 stocks by volume to avoid too many history requests
-        // (Reduced from 100 to 50 to save FinMind quota)
+        // Take top 15 stocks by volume to avoid hitting FinMind rate limits (Register Tier: ~300-600 calls/hr)
+        // 15 stocks * 2 APIs (Price + Inst) = 30 calls. This is safe for a single run.
         const topCandidates = candidates
             .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-            .slice(0, 50);
+            .slice(0, 15);
 
         console.log(`Identified ${topCandidates.length} potential breakout candidates.`);
 
@@ -59,31 +59,45 @@ export const ScannerService = {
         const results: AnalysisResult[] = [];
 
         // Fetch histories in chunks
-        const chunkSize = 10;
+        const chunkSize = 3; // Smaller chunks
         for (let i = 0; i < topCandidates.length; i += chunkSize) {
             const chunk = topCandidates.slice(i, i + chunkSize);
             console.log(`Processing history chunk ${Math.floor(i / chunkSize) + 1}...`);
 
-            const historyPromises = chunk.map(c =>
-                Promise.all([
-                    FinMindClient.getDailyStats({ stockId: c.stock_id, startDate }),
-                    FinMindClient.getInstitutional({ stockId: c.stock_id, startDate })
-                ]).then(([prices, insts]) => ({ stockId: c.stock_id, prices, insts }))
-            );
+            try {
+                const historyPromises = chunk.map(c =>
+                    Promise.all([
+                        FinMindClient.getDailyStats({ stockId: c.stock_id, startDate }),
+                        FinMindClient.getInstitutional({ stockId: c.stock_id, startDate })
+                    ]).then(([prices, insts]) => ({ stockId: c.stock_id, prices, insts }))
+                );
 
-            const chunkResults = await Promise.all(historyPromises);
+                const chunkResults = await Promise.all(historyPromises);
 
-            for (const { stockId, prices, insts } of chunkResults) {
-                if (prices.length < 20) continue; // Need enough days for MA20
+                for (const { stockId, prices, insts } of chunkResults) {
+                    if (prices.length < 20) continue; // Need enough days for MA20
 
-                const result = evaluateStock(stockId, { prices, insts });
-                if (result && (result.score > 0.4 || result.tags.length > 0)) {
-                    results.push(result);
+                    const result = evaluateStock(stockId, { prices, insts });
+                    if (result) {
+                        // Pass even if score is low, to show at least some results, or keep filter
+                        // Let's keep filter but maybe relax it if needed. 
+                        // For now keep strict filter to ensure quality.
+                        if (result.score > 0.4 || result.tags.length > 0) {
+                            results.push(result);
+                        }
+                    }
+                }
+            } catch (error: any) {
+                console.error(`Error processing chunk: ${error.message}`);
+                if (error.message === 'FINMIND_TIER_RESTRICTION') {
+                    console.warn('FinMind rate limit hit. Stopping further history fetches.');
+                    // Add a special tag to the last result or just break
+                    break;
                 }
             }
 
-            // Short delay
-            await new Promise(r => setTimeout(r, 200));
+            // Longer delay to be safe
+            await new Promise(r => setTimeout(r, 1500));
         }
 
         results.sort((a, b) => b.score - a.score);
