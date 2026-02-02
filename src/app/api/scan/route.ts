@@ -24,7 +24,9 @@ export async function GET() {
         console.error('Scan Error:', error);
         return NextResponse.json({
             success: false,
-            error: error.message
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            details: error.toString()
         }, { status: 500 });
     }
 }
