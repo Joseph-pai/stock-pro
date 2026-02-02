@@ -40,7 +40,11 @@ export const ExchangeClient = {
     getTwseDailyQuotes: async (): Promise<StockData[]> => {
         try {
             const url = 'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json';
-            const res = await axios.get<TwseResponse>(url);
+            const res = await axios.get<TwseResponse>(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
 
             if (res.data.stat !== 'OK') {
                 console.error('TWSE API Error:', res.data.stat);
@@ -86,7 +90,11 @@ export const ExchangeClient = {
     getTpexDailyQuotes: async (): Promise<StockData[]> => {
         try {
             const url = 'https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no14/stk_orderby_result.php?l=zh-tw&d=&se=EW&t=D';
-            const res = await axios.get<TpexResponse>(url);
+            const res = await axios.get<TpexResponse>(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
 
             if (!res.data.aaData) {
                 console.error('TPEX API Error: No aaData');
