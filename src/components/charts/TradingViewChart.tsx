@@ -9,9 +9,10 @@ interface ChartProps {
     ma5?: number[];
     ma10?: number[];
     ma20?: number[];
+    poc?: number;
 }
 
-export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20 }) => {
+export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, poc }) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -45,6 +46,18 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20 }
         });
 
         candlestickSeries.setData(data as CandlestickData<Time>[]);
+
+        // Render POC Line if available
+        if (poc) {
+            candlestickSeries.createPriceLine({
+                price: poc,
+                color: '#facc15', // yellow-400
+                lineWidth: 2,
+                lineStyle: 2, // Dashed
+                axisLabelVisible: true,
+                title: 'POC',
+            });
+        }
 
         // Volume
         const volumeSeries = chart.addHistogramSeries({
@@ -89,7 +102,7 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20 }
             window.removeEventListener('resize', handleResize);
             chart.remove();
         };
-    }, [data, ma5, ma10, ma20]);
+    }, [data, ma5, ma10, ma20, poc]);
 
     return <div ref={chartContainerRef} className="w-full h-full" />;
 };

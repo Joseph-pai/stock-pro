@@ -40,6 +40,10 @@ export interface AnalysisResult {
     is_ma_breakout: boolean;   // Price > Max(MA)
     consecutive_buy: number;   // Investment Trust buy streak
 
+    // Expert System
+    poc: number;               // Point of Control Price
+    verdict: string;           // Human readable analysis (e.g. "Bullish Breakout")
+
     // Flags
     tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN')[];
 }

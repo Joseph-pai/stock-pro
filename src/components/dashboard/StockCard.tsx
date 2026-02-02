@@ -70,6 +70,14 @@ export const StockCard: React.FC<StockCardProps> = ({ data, onClick }) => {
                 </div>
             </div>
 
+            {data.verdict && (
+                <div className="mt-4 px-3 py-2 rounded-lg bg-slate-800/50 border border-white/5 text-xs text-center">
+                    <span className="text-slate-400 font-mono tracking-tight mr-2">Verdict:</span>
+                    <span className="text-slate-200 font-bold">{data.verdict}</span>
+                </div>
+            )}
+
+
             <div className="mt-4 flex flex-wrap gap-2">
                 {data.tags.map(tag => (
                     <span

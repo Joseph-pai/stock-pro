@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TradingViewChart } from '@/components/charts/TradingViewChart';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, Maximize, TrendingUp, Info } from 'lucide-react';
-import { calculateSMA } from '@/services/indicators';
+import { calculateSMA, calculatePOC } from '@/services/indicators';
 import { StockCandle } from '@/types';
 import { useEffect, useState } from 'react';
 
@@ -80,6 +80,7 @@ export default function ChartPage() {
                         ma5={ma5}
                         ma10={ma10}
                         ma20={ma20}
+                        poc={calculatePOC(data || [], 20)}
                     />
                 )}
             </div>

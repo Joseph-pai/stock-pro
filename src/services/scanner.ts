@@ -1,4 +1,5 @@
 import { FinMindClient } from '@/lib/finmind';
+import { ExchangeClient } from '@/lib/exchange';
 import { evaluateStock } from './engine';
 import { AnalysisResult, StockData } from '@/types';
 import { format, subDays, isWeekend } from 'date-fns';
@@ -23,56 +24,42 @@ const TOP_50_STOCKS = [
 
 export const ScannerService = {
     scanMarket: async (dates: string[]) => {
-        // Stage 1: Get the latest trading day data
-        console.log('Fetching latest market snapshot...');
+        // Stage 1: Get the latest trading day market snapshot (Official TWSE/TPEx)
+        console.log('Fetching latest market snapshot from TWSE/TPEx...');
         let latestData: StockData[] = [];
-        const attempts: string[] = [];
 
-        // Try the last 5 days to find the most recent trading day
-        for (let i = 0; i < 5; i++) {
-            const date = dates[dates.length - 1 - i];
-            if (!date) continue;
-
-            try {
-                const data = await FinMindClient.getDailyStats({ date });
-                if (data.length > 500) { // Significant number of stocks means it's a trading day
-                    latestData = data;
-                    console.log(`Using ${date} as the latest trading day. Found ${data.length} stocks.`);
-                    break;
-                } else {
-                    attempts.push(`${date}: Only ${data.length} records found.`);
-                }
-            } catch (error: any) {
-                if (error.message === 'FINMIND_TIER_RESTRICTION') {
-                    console.warn('Register tier detected. Switching to limited scan mode.');
-                    return this.performLimitedScan(dates);
-                }
-                attempts.push(`${date}: ${error.message}`);
-            }
+        try {
+            latestData = await ExchangeClient.getAllMarketQuotes();
+        } catch (e: any) {
+            console.error('Failed to fetch market data:', e.message);
         }
 
         if (latestData.length === 0) {
-            throw new Error(`Market data not found. Attempts: [${attempts.join(' | ')}]. Server Date: ${new Date().toISOString()}`);
+            throw new Error(`Market data not found. Please check internet connection or exchange availability.`);
         }
 
         // Stage 2: Identifying Candidates (Broad Filter)
-        // Criteria: Volume > 1000 samples (liquidity) and positive change
+        // Criteria: Volume > 2000 shares (liquidity) and positive change
+        // Note: ExchangeClient returns volume in SHARES directly (or adjusted in client). 
+        // TWSE 'Trading_Volume' from code is shares.
         console.log('Filtering candidates...');
         const candidates = latestData.filter(s => s.Trading_Volume > 2000 && s.close > s.open);
 
-        // Take top 100 stocks by volume to avoid too many history requests
+        // Take top 50 stocks by volume to avoid too many history requests
+        // (Reduced from 100 to 50 to save FinMind quota)
         const topCandidates = candidates
             .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-            .slice(0, 100);
+            .slice(0, 50);
 
         console.log(`Identified ${topCandidates.length} potential breakout candidates.`);
 
-        // Stage 3: Fetch history for top candidates
+        // Stage 3: Fetch history for top candidates using FinMind (for technical analysis)
+        // We need history to calculate MA, Volume Ratio, and Institutional buying
         const startDate = dates[0];
         const results: AnalysisResult[] = [];
 
-        // Fetch histories in chunks to stay under timeout/rate limits
-        const chunkSize = 20;
+        // Fetch histories in chunks
+        const chunkSize = 10;
         for (let i = 0; i < topCandidates.length; i += chunkSize) {
             const chunk = topCandidates.slice(i, i + chunkSize);
             console.log(`Processing history chunk ${Math.floor(i / chunkSize) + 1}...`);
@@ -95,13 +82,12 @@ export const ScannerService = {
                 }
             }
 
-            // Short delay to avoid hitting rate limits too hard? 
-            // In serverless we want to finish fast, but 100ms is safe.
-            await new Promise(r => setTimeout(r, 100));
+            // Short delay
+            await new Promise(r => setTimeout(r, 200));
         }
 
         results.sort((a, b) => b.score - a.score);
-        return results.slice(0, 50);
+        return results;
     },
 
     /**

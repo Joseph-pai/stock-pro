@@ -1,5 +1,5 @@
 import { StockData, InstitutionalData, AnalysisResult } from '@/types';
-import { calculateSMA, checkMaAlignment, calculateVolumeRatio } from './indicators';
+import { calculateSMA, checkMaAlignment, calculateVolumeRatio, calculatePOC } from './indicators';
 import { CONFIG } from '@/lib/config';
 
 interface StockHistory {
@@ -44,19 +44,27 @@ export const evaluateStock = (stockId: string, history: StockHistory): AnalysisR
     }
 
     // 3. Institutional Trend (Investment Trust)
-    // Check if Investment Trust bought > 0 for last 3 days
-    // We need to filter Inst data for this stock and check dates.
-    // Assuming 'insts' contains only this stock's data.
     const recentInsts = insts.filter(i => i.name === 'Investment_Trust').slice(-3);
     const consecutiveBuy = recentInsts.length === 3 && recentInsts.every(i => i.buy - i.sell > 0);
 
+    // 4. Point of Control (POC)
+    // Use last 20 days for POC profile
+    const poc = calculatePOC(prices, 20);
+
     // Score Calculation
     // Formula: Score = (V_ratio * 0.4) + (MA_alignment * 0.3) + (Inst_trend * 0.3)
-    // Converting Booleans to 1.0
     const maScore = (isAligned && isBreakout) ? 1.0 : 0;
     const instScore = consecutiveBuy ? 1.0 : 0;
 
     const totalScore = (vRatio * 0.4) + (maScore * 0.3) + (instScore * 0.3);
+
+    // Expert System Verdict
+    let verdict = 'Neutral';
+    if (totalScore > 0.7) verdict = 'Strong Buy - 籌碼與技術面共振';
+    else if (isBreakout && today.close > poc) verdict = 'Bullish - 突破POC';
+    else if (isBreakout && today.close < poc) verdict = 'Caution - 假突破疑慮 (低於POC)';
+    else if (consecutiveBuy) verdict = 'Accumulating - 投信佈局中';
+    else if (vRatio > 2) verdict = 'Volatile - 量能異動';
 
     // Generate Tags
     const tags: AnalysisResult['tags'] = [];
@@ -77,6 +85,8 @@ export const evaluateStock = (stockId: string, history: StockHistory): AnalysisR
         is_ma_aligned: isAligned,
         is_ma_breakout: isBreakout,
         consecutive_buy: consecutiveBuy ? 3 : 0,
+        poc,
+        verdict,
         tags
     };
 };

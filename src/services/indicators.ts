@@ -43,3 +43,53 @@ export const calculateVolumeRatio = (currentVolume: number, historicalVolumes: n
     if (avg === 0) return 0;
     return currentVolume / avg;
 };
+
+/**
+ * Calculate Point of Control (POC)
+ * Approximated using Volume Profile on Daily Data (Volume by Price buckets)
+ * @param prices Array of StockData
+ * @param period Lookback period (default 20 days)
+ */
+export const calculatePOC = (prices: any[], period: number = 20): number => {
+    if (prices.length === 0) return 0;
+
+    // 1. Get recent data
+    const slice = prices.slice(Math.max(0, prices.length - period));
+    if (slice.length === 0) return 0;
+
+    // 2. Determine price range
+    const maxPrice = Math.max(...slice.map((p: any) => p.max));
+    const minPrice = Math.min(...slice.map((p: any) => p.min));
+
+    if (maxPrice === minPrice) return maxPrice;
+
+    // 3. Create buckets (e.g., 50 bins)
+    const binCount = 50;
+    const binSize = (maxPrice - minPrice) / binCount;
+    const bins = new Array(binCount).fill(0);
+
+    // 4. Distribute volume into bins
+    // Strategy: Distribute day's volume evenly across the day's price range (or just assign to close/avg)
+    // Better approximation: Assign volume to the "Average Price" of the day ( (Open+Close+High+Low)/4 )
+    slice.forEach((day: any) => {
+        const avgPrice = (day.open + day.close + day.max + day.min) / 4;
+        const binIndex = Math.min(
+            Math.floor((avgPrice - minPrice) / binSize),
+            binCount - 1
+        );
+        bins[binIndex] += day.Trading_Volume;
+    });
+
+    // 5. Find bin with max volume
+    let maxVol = -1;
+    let maxBinIndex = -1;
+    for (let i = 0; i < binCount; i++) {
+        if (bins[i] > maxVol) {
+            maxVol = bins[i];
+            maxBinIndex = i;
+        }
+    }
+
+    // 6. Return price level of max bin (center of bin)
+    return minPrice + (maxBinIndex * binSize) + (binSize / 2);
+};
