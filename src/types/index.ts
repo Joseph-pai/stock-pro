@@ -46,6 +46,9 @@ export interface AnalysisResult {
 
     // Flags
     tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN')[];
+
+    // Detailed History (Optional, for Charting)
+    history?: StockData[];
 }
 
 export interface StockCandle {

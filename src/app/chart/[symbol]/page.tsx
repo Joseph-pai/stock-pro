@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TradingViewChart } from '@/components/charts/TradingViewChart';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, Maximize, TrendingUp, Info } from 'lucide-react';
-import { calculateSMA, calculatePOC } from '@/services/indicators';
+import { calculateSMA } from '@/services/indicators';
 import { StockCandle } from '@/types';
 import { useEffect, useState } from 'react';
 
@@ -25,30 +25,31 @@ export default function ChartPage() {
     const { data, isLoading } = useQuery({
         queryKey: ['stock', symbol],
         queryFn: async () => {
-            // We'll use a direct internal API route for simplicity or fetch mapping
-            // For now, let's assume we have an endpoint that returns history
-            const res = await fetch(`/api/stocks/${symbol}`);
+            const res = await fetch(`/api/analyze/${symbol}`);
             const json = await res.json();
-            return json.data as any[];
+            return json.data; // Now returns AnalysisResult with history
         },
     });
 
     // Process data for chart
-    const candles: StockCandle[] = data?.map(d => ({
+    const history = data?.history || [];
+    const candles: StockCandle[] = history.map((d: any) => ({
         time: d.date,
         open: d.open,
         high: d.max,
         low: d.min,
         close: d.close,
-        value: d.Trading_Volume / 1000, // Show in K shares
-    })) || [];
+        value: d.Trading_Volume / 1000,
+    }));
 
-    const closePrices = data?.map(d => d.close) || [];
+    const closePrices = history.map((d: any) => d.close) || [];
     const ma5 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 5) || 0).reverse();
     const ma10 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 10) || 0).reverse();
     const ma20 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 20) || 0).reverse();
 
     if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-950 text-blue-500 animate-pulse">Loading...</div>;
+
+    const poc = data?.poc || 0;
 
     return (
         <div className={`flex flex-col bg-slate-950 ${isLandscape ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
@@ -80,7 +81,7 @@ export default function ChartPage() {
                         ma5={ma5}
                         ma10={ma10}
                         ma20={ma20}
-                        poc={calculatePOC(data || [], 20)}
+                        poc={poc}
                     />
                 )}
             </div>
@@ -102,7 +103,7 @@ export default function ChartPage() {
                     <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 flex gap-3">
                         <Info className="w-5 h-5 text-blue-400 shrink-0" />
                         <p className="text-xs text-blue-300 leading-relaxed italic">
-                            該標的目前符合爆發訊號，建議關注均量比與投信籌碼是否持續跟進。本分析僅供參考，投資有風險。
+                            {data?.verdict || '正在分析中...'}
                         </p>
                     </div>
                 </div>

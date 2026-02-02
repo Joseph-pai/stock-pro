@@ -70,11 +70,18 @@ export const StockCard: React.FC<StockCardProps> = ({ data, onClick }) => {
                 </div>
             </div>
 
-            {data.verdict && (
-                <div className="mt-4 px-3 py-2 rounded-lg bg-slate-800/50 border border-white/5 text-xs text-center">
-                    <span className="text-slate-400 font-mono tracking-tight mr-2">Verdict:</span>
-                    <span className="text-slate-200 font-bold">{data.verdict}</span>
+            {/* Analysis State: Pending vs Analyzed */}
+            {data.verdict === 'Pending Analysis' ? (
+                <div className="mt-4 px-3 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-xs text-center animate-pulse">
+                    <span className="text-blue-300 font-bold">查看 AI 分析報告</span>
                 </div>
+            ) : (
+                data.verdict && (
+                    <div className="mt-4 px-3 py-2 rounded-lg bg-slate-800/50 border border-white/5 text-xs text-center">
+                        <span className="text-slate-400 font-mono tracking-tight mr-2">Verdict:</span>
+                        <span className="text-slate-200 font-bold">{data.verdict}</span>
+                    </div>
+                )
             )}
 
 
