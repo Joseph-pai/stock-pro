@@ -144,5 +144,76 @@ export const ExchangeClient = {
 
         console.log(`Fetched: TWSE ${twse.length}, TPEX ${tpex.length}`);
         return [...twse, ...tpex];
+    },
+
+    getStockHistory: async (stockId: string): Promise<StockData[]> => {
+        // Fallback: Fetch last 60 days history from TWSE/TPEX
+        const now = new Date();
+        const months = [0, 1, 2].map(i => {
+            const d = new Date();
+            d.setMonth(now.getMonth() - i);
+            return d;
+        });
+
+        const fetchTwseMonth = async (date: Date) => {
+            const ds = date.toISOString().slice(0, 10).replace(/-/g, '');
+            const url = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=${ds}&stockNo=${stockId}&response=json`;
+            const res = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (res.data.stat !== 'OK') return [];
+            return res.data.data.map((row: any) => ({
+                date: ExchangeClient.convertRocDateToWestern(row[0]),
+                stock_id: stockId,
+                stock_name: '', // Info not in history
+                Trading_Volume: parseInt(row[1].replace(/,/g, '')),
+                Trading_money: parseInt(row[2].replace(/,/g, '')),
+                open: parseFloat(row[3].replace(/,/g, '')),
+                max: parseFloat(row[4].replace(/,/g, '')),
+                min: parseFloat(row[5].replace(/,/g, '')),
+                close: parseFloat(row[6].replace(/,/g, '')),
+                spread: parseFloat(row[7].replace(/X/g, '')),
+                Trading_turnover: parseInt(row[8].replace(/,/g, ''))
+            }));
+        };
+
+        const fetchTpexMonth = async (date: Date) => {
+            const rocYear = date.getFullYear() - 1911;
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/stk_43_result.php?l=zh-tw&d=${rocYear}/${month}&stkno=${stockId}`;
+            const res = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!res.data.stkData) return [];
+            return res.data.stkData.map((row: any) => ({
+                date: ExchangeClient.convertRocDateToWestern(row[0]),
+                stock_id: stockId,
+                stock_name: '',
+                Trading_Volume: parseInt(row[1].replace(/,/g, '')) * 1000,
+                Trading_money: parseInt(row[2].replace(/,/g, '')) * 1000,
+                open: parseFloat(row[3].replace(/,/g, '')),
+                max: parseFloat(row[4].replace(/,/g, '')),
+                min: parseFloat(row[5].replace(/,/g, '')),
+                close: parseFloat(row[6].replace(/,/g, '')),
+                spread: parseFloat(row[7].replace(/,/g, '')),
+                Trading_turnover: parseInt(row[8].replace(/,/g, ''))
+            }));
+        };
+
+        try {
+            let results: StockData[] = [];
+            for (const m of months) {
+                const data = await fetchTwseMonth(m);
+                results = [...data, ...results];
+            }
+            if (results.length > 0) return results.sort((a, b) => a.date.localeCompare(b.date));
+        } catch (e) { }
+
+        try {
+            let results: StockData[] = [];
+            for (const m of months) {
+                const data = await fetchTpexMonth(m);
+                results = [...data, ...results];
+            }
+            if (results.length > 0) return results.sort((a, b) => a.date.localeCompare(b.date));
+        } catch (e) { }
+
+        return [];
     }
 };

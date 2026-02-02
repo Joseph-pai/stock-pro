@@ -70,19 +70,31 @@ export const ScannerService = {
     analyzeStock: async (stockId: string): Promise<AnalysisResult | null> => {
         console.log(`Analyzing stock ${stockId}...`);
 
-        // 1. Fetch History (Price + Inst)
-        // Need ~30 days for MA20 and POC
         const endDate = format(new Date(), 'yyyy-MM-dd');
-        // Fetch 45 days to be safe for holidays/weekends to get 20 trading days
         const startDate = format(subDays(new Date(), 60), 'yyyy-MM-dd');
 
-        try {
-            const [prices, insts] = await Promise.all([
-                FinMindClient.getDailyStats({ stockId, startDate, endDate }),
-                FinMindClient.getInstitutional({ stockId, startDate, endDate })
-            ]);
+        let prices: StockData[] = [];
+        let insts: any[] = [];
 
-            if (prices.length < 20) {
+        try {
+            // Try FinMind first
+            try {
+                const [p, i] = await Promise.all([
+                    FinMindClient.getDailyStats({ stockId, startDate, endDate }),
+                    FinMindClient.getInstitutional({ stockId, startDate, endDate })
+                ]);
+                prices = p;
+                insts = i;
+            } catch (finMindError: any) {
+                if (finMindError.message === 'FINMIND_TIER_RESTRICTION' || (finMindError as any).tier === 'register') {
+                    console.warn(`[Fallback] FinMind Restricted for ${stockId}, using Exchange API.`);
+                    prices = await ExchangeClient.getStockHistory(stockId);
+                } else {
+                    throw finMindError;
+                }
+            }
+
+            if (prices.length < 10) {
                 console.warn(`Insufficient data for ${stockId} (found ${prices.length} days)`);
                 return null;
             }
@@ -91,10 +103,10 @@ export const ScannerService = {
 
             if (!result) return null;
 
-            // Attach history for the chart page
             return {
                 ...result,
-                history: prices
+                history: prices,
+                tags: insts.length === 0 ? [...result.tags, 'LIMITED_SCAN'] : result.tags
             };
 
         } catch (error: any) {
