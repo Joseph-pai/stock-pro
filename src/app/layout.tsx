@@ -14,6 +14,9 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "TSBS",
   },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {

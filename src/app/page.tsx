@@ -89,7 +89,7 @@ export default function DashboardPage() {
 
       {/* Footer / Status */}
       <footer className="mt-12 text-center">
-        <p className="text-[10px] text-slate-600 font-mono uppercase tracking-widest">
+        <p className="text-[10px] text-slate-600 font-mono uppercase tracking-widest" suppressHydrationWarning>
           Last Scan: {new Date().toLocaleTimeString()}
         </p>
       </footer>

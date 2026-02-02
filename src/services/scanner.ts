@@ -29,13 +29,17 @@ export const ScannerService = {
         const instPromises = instDates.map(date => FinMindClient.getInstitutional({ date }));
 
         const [pricesResults, instResults] = await Promise.all([
-            Promise.all(pricePromises),
-            Promise.all(instPromises)
+            Promise.all(pricePromises.map(p => p.catch(e => { console.error('Price Fetch Fail', e.message); return []; }))),
+            Promise.all(instPromises.map(p => p.catch(e => { console.error('Inst Fetch Fail', e.message); return []; })))
         ]);
 
-        // Flatten
-        const allPrices = pricesResults.flat();
-        const allInsts = instResults.flat();
+        // Flatten and Filter out empty
+        const allPrices = pricesResults.flat().filter(p => !!p && !!p.stock_id);
+        const allInsts = instResults.flat().filter(i => !!i && !!i.stock_id);
+
+        if (allPrices.length === 0) {
+            throw new Error(`FinMind API returned no price data for the requested dates: ${dates.join(', ')}. Check Token and API status.`);
+        }
 
         // 2. Group by Stock ID
         const pricesByStock = groupBy(allPrices, 'stock_id');

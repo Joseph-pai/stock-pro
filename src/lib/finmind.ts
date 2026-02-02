@@ -28,25 +28,36 @@ export const FinMindClient = {
      * If only date is provided, fetches ALL stocks for that single day.
      */
     getDailyStats: async (options: { stockId?: string; date?: string; startDate?: string }) => {
-        const params = getParams('TaiwanStockPrice', options.stockId, options.date, options.startDate);
-        const res = await client.get<FinMindResponse<StockData>>('', { params });
-        if (res.status !== 200 || res.data.status !== 200) {
-            console.error('FinMind API Error:', res.data.msg);
+        try {
+            const params = getParams('TaiwanStockPrice', options.stockId, options.date, options.startDate);
+            const res = await client.get<FinMindResponse<StockData>>('', { params: params });
+            if (!res.data || res.data.status !== 200) {
+                console.warn(`FinMind API Warning [Price]: ${res.data?.msg || 'Unknown status'}`);
+                return [];
+            }
+            return res.data.data;
+        } catch (error: any) {
+            console.error(`FinMind Network Error [Price]: ${error.message}`);
             return [];
         }
-        return res.data.data;
     },
 
     /**
      * Get institutional investors data.
      */
     getInstitutional: async (options: { stockId?: string; date?: string; startDate?: string }) => {
-        const params = getParams('TaiwanStockHoldingSharesPer', options.stockId, options.date, options.startDate);
-        const res = await client.get<FinMindResponse<InstitutionalData>>('', { params });
-        if (res.status !== 200 || res.data.status !== 200) {
+        try {
+            const params = getParams('TaiwanStockHoldingSharesPer', options.stockId, options.date, options.startDate);
+            const res = await client.get<FinMindResponse<InstitutionalData>>('', { params: params });
+            if (!res.data || res.data.status !== 200) {
+                console.warn(`FinMind API Warning [Inst]: ${res.data?.msg || 'Unknown status'}`);
+                return [];
+            }
+            return res.data.data;
+        } catch (error: any) {
+            console.error(`FinMind Network Error [Inst]: ${error.message}`);
             return [];
         }
-        return res.data.data;
     },
 
     /**
