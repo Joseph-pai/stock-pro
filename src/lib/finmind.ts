@@ -15,7 +15,7 @@ const getParams = (dataset: string, stockId?: string, date?: string, startDate?:
         dataset,
         token: CONFIG.FINMIND.TOKEN,
     };
-    if (stockId) params.stock_id = stockId;
+    if (stockId) params.data_id = stockId;
     if (date) params.date = date;
     if (startDate) params.start_date = startDate;
     return new URLSearchParams(params);
