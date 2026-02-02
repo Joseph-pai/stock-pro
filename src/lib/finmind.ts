@@ -12,15 +12,20 @@ const client = axios.create({
  * Uses plain objects for params to ensure Axios compatibility.
  */
 export const FinMindClient = {
-    getDailyStats: async (options: { stockId?: string; date?: string; startDate?: string }) => {
+    getDailyStats: async (options: { stockId?: string; date?: string; startDate?: string; endDate?: string }) => {
         try {
             const params: any = {
                 dataset: 'TaiwanStockPrice',
                 token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
-            if (options.date) params.date = options.date;
+            // Map 'date' to 'start_date' AND 'end_date' for single-day snapshot
+            if (options.date) {
+                params.start_date = options.date;
+                params.end_date = options.date;
+            }
             if (options.startDate) params.start_date = options.startDate;
+            if (options.endDate) params.end_date = options.endDate;
 
             const res = await client.get<FinMindResponse<StockData>>('', { params });
 
@@ -36,15 +41,20 @@ export const FinMindClient = {
         }
     },
 
-    getInstitutional: async (options: { stockId?: string; date?: string; startDate?: string }) => {
+    getInstitutional: async (options: { stockId?: string; date?: string; startDate?: string; endDate?: string }) => {
         try {
             const params: any = {
                 dataset: 'TaiwanStockHoldingSharesPer',
                 token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
-            if (options.date) params.date = options.date;
+            // Map 'date' to 'start_date' AND 'end_date' for single-day snapshot
+            if (options.date) {
+                params.start_date = options.date;
+                params.end_date = options.date;
+            }
             if (options.startDate) params.start_date = options.startDate;
+            if (options.endDate) params.end_date = options.endDate;
 
             const res = await client.get<FinMindResponse<InstitutionalData>>('', { params });
 
