@@ -43,9 +43,9 @@ export default function ChartPage() {
     }));
 
     const closePrices = history.map((d: any) => d.close) || [];
-    const ma5 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 5) || 0).reverse();
-    const ma10 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 10) || 0).reverse();
-    const ma20 = closePrices.map((_, i) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 20) || 0).reverse();
+    const ma5 = closePrices.map((_: any, i: number) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 5) || 0).reverse();
+    const ma10 = closePrices.map((_: any, i: number) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 10) || 0).reverse();
+    const ma20 = closePrices.map((_: any, i: number) => calculateSMA(closePrices.slice(0, i + 1).reverse(), 20) || 0).reverse();
 
     if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-950 text-blue-500 animate-pulse">Loading...</div>;
 
