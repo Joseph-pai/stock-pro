@@ -34,11 +34,11 @@ export const ScannerService = {
         ]);
 
         // Flatten and Filter out empty
-        const allPrices = pricesResults.flat().filter(p => !!p && !!p.stock_id);
-        const allInsts = instResults.flat().filter(i => !!i && !!i.stock_id);
+        const allPrices = pricesResults.flat() as StockData[];
+        const allInsts = instResults.flat() as InstitutionalData[];
 
         if (allPrices.length === 0) {
-            throw new Error(`FinMind API returned no price data for the requested dates: ${dates.join(', ')}. Check Token and API status.`);
+            throw new Error(`FinMind API returned no price data for the requested dates. Check Token and API status.`);
         }
 
         // 2. Group by Stock ID
@@ -49,12 +49,11 @@ export const ScannerService = {
         const results: AnalysisResult[] = [];
 
         for (const stockId in pricesByStock) {
-            // Sort by date just in case
             const stockPrices = pricesByStock[stockId].sort((a, b) => a.date.localeCompare(b.date));
             const stockInsts = instsByStock[stockId] || [];
 
-            // Basic filter: Filter out low volume or very cheap stocks to reduce noise?
-            // Optional: Skip stocks with price < 10 or volume < 100
+            if (stockPrices.length === 0) continue;
+
             const latest = stockPrices[stockPrices.length - 1];
             if (latest.close < 5) continue;
 
