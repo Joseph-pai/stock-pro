@@ -38,11 +38,11 @@ export const ScannerService = {
         // Stage 2: Identifying Candidates (Broad Filter)
         // Criteria: Volume > 1000 samples (liquidity) and positive change
         console.log('Filtering candidates...');
-        const candidates = latestData.filter(s => s.trading_volume > 2000 && s.close > s.open);
+        const candidates = latestData.filter(s => s.Trading_Volume > 2000 && s.close > s.open);
 
         // Take top 100 stocks by volume to avoid too many history requests
         const topCandidates = candidates
-            .sort((a, b) => b.trading_volume - a.trading_volume)
+            .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
             .slice(0, 100);
 
         console.log(`Identified ${topCandidates.length} potential breakout candidates.`);
