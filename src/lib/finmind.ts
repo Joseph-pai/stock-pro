@@ -30,12 +30,25 @@ export const FinMindClient = {
             const res = await client.get<FinMindResponse<StockData>>('', { params });
 
             if (!res.data || res.data.status !== 200) {
-                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${res.data?.msg || 'No response'}`);
+                const msg = res.data?.msg || 'No response';
+                if (msg.includes('Your level is register')) {
+                    const tierError = new Error('FINMIND_TIER_RESTRICTION');
+                    (tierError as any).tier = 'register';
+                    throw tierError;
+                }
+                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${msg}`);
             }
             return res.data.data || [];
         } catch (error: any) {
+            if (error.message === 'FINMIND_TIER_RESTRICTION') throw error;
             if (error.response) {
-                throw new Error(`API ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+                const msg = error.response.data?.msg || JSON.stringify(error.response.data);
+                if (msg.includes('Your level is register')) {
+                    const tierError = new Error('FINMIND_TIER_RESTRICTION');
+                    (tierError as any).tier = 'register';
+                    throw tierError;
+                }
+                throw new Error(`API ${error.response.status}: ${msg}`);
             }
             throw error;
         }
@@ -59,12 +72,25 @@ export const FinMindClient = {
             const res = await client.get<FinMindResponse<InstitutionalData>>('', { params });
 
             if (!res.data || res.data.status !== 200) {
-                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${res.data?.msg || 'No response'}`);
+                const msg = res.data?.msg || 'No response';
+                if (msg.includes('Your level is register')) {
+                    const tierError = new Error('FINMIND_TIER_RESTRICTION');
+                    (tierError as any).tier = 'register';
+                    throw tierError;
+                }
+                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${msg}`);
             }
             return res.data.data || [];
         } catch (error: any) {
+            if (error.message === 'FINMIND_TIER_RESTRICTION') throw error;
             if (error.response) {
-                throw new Error(`API ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+                const msg = error.response.data?.msg || JSON.stringify(error.response.data);
+                if (msg.includes('Your level is register')) {
+                    const tierError = new Error('FINMIND_TIER_RESTRICTION');
+                    (tierError as any).tier = 'register';
+                    throw tierError;
+                }
+                throw new Error(`API ${error.response.status}: ${msg}`);
             }
             throw error;
         }

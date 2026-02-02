@@ -41,7 +41,7 @@ export interface AnalysisResult {
     consecutive_buy: number;   // Investment Trust buy streak
 
     // Flags
-    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT')[];
+    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN')[];
 }
 
 export interface StockCandle {

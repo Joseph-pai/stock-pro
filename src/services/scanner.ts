@@ -12,6 +12,15 @@ const groupBy = <T>(arr: T[], key: keyof T): Record<string, T[]> => {
     }, {} as Record<string, T[]>);
 };
 
+// Top 50 Stocks (Taiwan Index Blue Chips) for Limited Scan fallback
+const TOP_50_STOCKS = [
+    '2330', '2317', '2454', '2308', '2382', '2412', '2881', '2882', '2303', '3711',
+    '2886', '2357', '2891', '3008', '1301', '1303', '1216', '2005', '2603', '2327',
+    '2880', '2884', '2885', '2890', '2892', '2883', '2887', '5880', '2888', '2408',
+    '2379', '2395', '3034', '3045', '2345', '2301', '4938', '2474', '2354', '1101',
+    '1326', '6505', '2609', '2615', '2912', '9904', '3037', '2360', '8046', '3231'
+];
+
 export const ScannerService = {
     scanMarket: async (dates: string[]) => {
         // Stage 1: Get the latest trading day data
@@ -34,6 +43,10 @@ export const ScannerService = {
                     attempts.push(`${date}: Only ${data.length} records found.`);
                 }
             } catch (error: any) {
+                if (error.message === 'FINMIND_TIER_RESTRICTION') {
+                    console.warn('Register tier detected. Switching to limited scan mode.');
+                    return this.performLimitedScan(dates);
+                }
                 attempts.push(`${date}: ${error.message}`);
             }
         }
@@ -89,5 +102,53 @@ export const ScannerService = {
 
         results.sort((a, b) => b.score - a.score);
         return results.slice(0, 50);
+    },
+
+    /**
+     * Fallback scan for "Register" level accounts
+     * Individually queries top stocks to circumvent market-wide limit
+     */
+    performLimitedScan: async (dates: string[]): Promise<AnalysisResult[]> => {
+        const startDate = dates[0];
+        const endDate = dates[dates.length - 1]; // Use precise snapshot
+        const results: AnalysisResult[] = [];
+
+        console.log(`Starting limited scan for ${TOP_50_STOCKS.length} blue-chip stocks...`);
+
+        // Chunk processing to avoid excessive concurrent requests
+        const chunkSize = 10;
+        for (let i = 0; i < TOP_50_STOCKS.length; i += chunkSize) {
+            const chunk = TOP_50_STOCKS.slice(i, i + chunkSize);
+
+            const historyPromises = chunk.map(stockId =>
+                Promise.all([
+                    FinMindClient.getDailyStats({ stockId, startDate, endDate }),
+                    FinMindClient.getInstitutional({ stockId, startDate, endDate })
+                ]).then(([prices, insts]) => ({ stockId, prices, insts }))
+                    .catch(e => {
+                        console.error(`Limited Scan Fail [${stockId}]:`, e.message);
+                        return null;
+                    })
+            );
+
+            const chunkResults = await Promise.all(historyPromises);
+
+            for (const item of chunkResults) {
+                if (!item || item.prices.length < 20) continue;
+
+                const result = evaluateStock(item.stockId, { prices: item.prices, insts: item.insts });
+                if (result) {
+                    // Mark as limited scan result
+                    result.tags.push('LIMITED_SCAN');
+                    results.push(result);
+                }
+            }
+
+            // Register tier has 600 req/hr limits, don't spam
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        return results;
     }
 };

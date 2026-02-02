@@ -60,6 +60,21 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Limited Scan Warning */}
+      {data?.some(s => s.tags.includes('LIMITED_SCAN')) && (
+        <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-3">
+          <div className="bg-amber-500/20 p-2 rounded-lg">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-500">限額掃描模式已啟動</p>
+            <p className="text-[11px] text-amber-200/60 leading-relaxed mt-1">
+              由於 API 帳戶等級 (Register) 限制，目前僅針對前 50 大熱門權值股進行選股掃描。若需全市場爆發預警功能，請考慮贊助 FinMind 平台以提升 API 權限。
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       <div className="space-y-4">
         {isLoading ? (
