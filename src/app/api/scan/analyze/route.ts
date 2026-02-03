@@ -35,6 +35,7 @@ export async function POST(req: Request) {
                 let consecutiveBuy = 0;
                 let instScore = 0;
                 let revenueSupport = false;
+                let revenueBonusPoints = 0;
                 try {
                     const endDate = format(new Date(), 'yyyy-MM-dd');
                     const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
@@ -54,7 +55,6 @@ export async function POST(req: Request) {
                     instScore = Math.min(consecutiveBuy / 5, 1) * 30;
 
                     // monthly revenue check -> compute MoM / YoY scores
-                    let revenueBonusPoints = 0;
                     try {
                         const revStart = format(subDays(new Date(), 400), 'yyyy-MM-dd');
                         const rev = await FinMindExtras.getMonthlyRevenue({ stockId: stock.id, startDate: revStart, endDate: endDate });
