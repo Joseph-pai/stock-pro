@@ -119,11 +119,25 @@ export default function DashboardPage() {
 
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
-          // Use real industry name from mapping or fallback
-          const augmented = batchJson.data.map((r: any) => ({
-            ...r,
-            sector_name: industryMap[r.stock_id] || (currentSectorName === '全部類股' ? '主板' : currentSectorName)
-          }));
+          // Robust sector resolution: Mapping -> Selected Sector -> Market Type
+          const augmented = batchJson.data.map((r: any) => {
+            const stockId = r.stock_id.trim();
+            const mappedSector = industryMap[stockId];
+
+            let resolvedSector = mappedSector;
+            if (!resolvedSector) {
+              if (currentSectorName && currentSectorName !== '全部類股') {
+                resolvedSector = currentSectorName;
+              } else {
+                resolvedSector = market === 'TWSE' ? '上市板' : '上櫃板';
+              }
+            }
+
+            return {
+              ...r,
+              sector_name: resolvedSector
+            };
+          });
           allResults.push(...augmented);
         }
       }
