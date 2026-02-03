@@ -314,7 +314,7 @@ export default function DashboardPage() {
 
       {/* Execute Button */}
       <button
-        onClick={runScan}
+        onClick={() => runScan()}
         disabled={isWorking}
         className={clsx(
           "w-full flex flex-col items-center justify-center p-10 rounded-[3rem] border-4 transition-all active:scale-[0.98] mb-12 group shadow-2xl relative overflow-hidden",
@@ -367,7 +367,7 @@ export default function DashboardPage() {
         {error && (
           <div className="p-10 bg-rose-500/10 border-4 border-rose-500/20 rounded-[3rem] text-center">
             <p className="text-2xl font-black text-rose-400">{error}</p>
-            <button onClick={runScan} className="mt-4 text-rose-500 underline font-black">點擊重試</button>
+            <button onClick={() => runScan()} className="mt-4 text-rose-500 underline font-black">點擊重試</button>
           </div>
         )}
 
