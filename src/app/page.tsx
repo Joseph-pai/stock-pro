@@ -97,22 +97,10 @@ export default function DashboardPage() {
         throw new Error(`找不到股票 ${stockId} 的數據`);
       }
 
-      // Priority 1: Use sector_name from API
-      let resolvedSector = singleResult.sector_name;
+      // Use sector_name from API directly
+      const resolvedSector = singleResult.sector_name || (market === 'TWSE' ? '上市板' : '上櫃板');
       
-      // Priority 2: Fallback to client-side industryMap if API didn't provide it
-      if (!resolvedSector || resolvedSector === '其他') {
-        const stockId_trimmed = singleResult.stock_id.trim();
-        const mappedSector = industryMap[stockId_trimmed];
-        if (mappedSector) {
-          resolvedSector = mappedSector;
-        }
-      }
-
-      // Priority 3: Last resort - use board name
-      if (!resolvedSector) {
-        resolvedSector = market === 'TWSE' ? '上市板' : '上櫃板';
-      }
+      console.debug(`[StockAnalysis] Stock ${singleResult.stock_id}: API sector="${singleResult.sector_name}", final="${resolvedSector}"`);
 
       const augmentedResult = {
         ...singleResult,
@@ -213,26 +201,11 @@ export default function DashboardPage() {
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
           const augmented = batchJson.data.map((r: any) => {
-            // Priority 1: Use sector_name from API (already includes industry mapping)
-            let resolvedSector = r.sector_name;
+            // API should already have sector_name from server-side industry mapping
+            // Use it directly without client-side override
+            const resolvedSector = r.sector_name || (market === 'TWSE' ? '上市板' : '上櫃板');
             
-            // Priority 2: Fallback to client-side industryMap if API didn't provide it
-            if (!resolvedSector || resolvedSector === '其他') {
-              const stockId = r.stock_id.trim();
-              const mappedSector = industryMap[stockId];
-              if (mappedSector) {
-                resolvedSector = mappedSector;
-              }
-            }
-
-            // Priority 3: Last resort - use current selected sector or board name
-            if (!resolvedSector) {
-              if (currentSectorName && currentSectorName !== '全部類股') {
-                resolvedSector = currentSectorName;
-              } else {
-                resolvedSector = market === 'TWSE' ? '上市板' : '上櫃板';
-              }
-            }
+            console.debug(`[StockScan] Stock ${r.stock_id}: API sector="${r.sector_name}", final="${resolvedSector}"`);
 
             return {
               ...r,
