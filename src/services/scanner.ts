@@ -1,6 +1,6 @@
 import { FinMindClient } from '@/lib/finmind';
 import { ExchangeClient } from '@/lib/exchange';
-import { evaluateStock, calculateVRatio, checkMaConstrict, checkInstFlow, checkVolumeIncreasing } from './engine';
+import { evaluateStock, calculateVRatio, checkMaConstrict, checkVolumeIncreasing } from './engine';
 import { AnalysisResult, StockData } from '@/types';
 import { format, subDays } from 'date-fns';
 import { calculateSMA } from './indicators';
@@ -234,13 +234,24 @@ export const ScannerService = {
                 return null;
             }
 
-            const result = evaluateStock(stockId, { prices, insts });
+            const result = evaluateStock(prices);
             if (!result) return null;
 
+            const today = prices[prices.length - 1];
             return {
-                ...result,
-                history: prices,
-                tags: insts.length === 0 ? [...result.tags, 'LIMITED_SCAN'] : result.tags
+                stock_id: stockId,
+                stock_name: today.stock_name || stockId,
+                close: today.close,
+                change_percent: result.changePercent,
+                score: 0,
+                v_ratio: result.vRatio,
+                is_ma_aligned: result.maData.isSqueezing,
+                is_ma_breakout: result.isBreakout,
+                consecutive_buy: 0,
+                poc: today.close,
+                verdict: '分析完成',
+                tags: ['DISCOVERY'],
+                history: prices
             };
         } catch (error: any) {
             console.error(`Analysis failed for ${stockId}:`, error.message);

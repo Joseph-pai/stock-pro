@@ -2,46 +2,25 @@ import { NextResponse } from 'next/server';
 import { ExchangeClient } from '@/lib/exchange';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-/**
- * GET /api/market/snapshot
- * 返回全市場當日快照數據（輕量級，用於前端初步篩選）
- */
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        const t0 = Date.now();
+        const { searchParams } = new URL(req.url);
+        const market = searchParams.get('market') || 'ALL';
 
-        // 獲取全市場快照
-        const snapshot = await ExchangeClient.getAllMarketQuotes();
+        console.log(`[API] Fetching market snapshot for: ${market}`);
 
-        const t1 = Date.now();
-
-        if (snapshot.length === 0) {
-            return NextResponse.json({
-                success: false,
-                error: 'Market data not available'
-            }, { status: 404 });
-        }
-
-        console.log(`[Market Snapshot] Fetched ${snapshot.length} stocks in ${t1 - t0}ms`);
+        const snapshot = await ExchangeClient.getAllMarketQuotes(market);
 
         return NextResponse.json({
             success: true,
             data: snapshot,
-            count: snapshot.length,
-            timing: {
-                fetch: t1 - t0,
-                total: t1 - t0
-            }
+            count: snapshot.length
         });
-
     } catch (error: any) {
-        console.error('[Market Snapshot] Error:', error);
         return NextResponse.json({
             success: false,
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: error.message
         }, { status: 500 });
     }
 }

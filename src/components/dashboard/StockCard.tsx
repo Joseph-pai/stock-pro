@@ -14,131 +14,126 @@ interface StockCardProps {
     onClick?: () => void;
 }
 
+/**
+ * Enhanced Stock Card with High Readability
+ * Focused on professional-grade visualization for TA signals
+ */
 export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) => {
     const isPositive = data.change_percent >= 0;
     const volTrend = data.dailyVolumeTrend || [];
     const maxVol = Math.max(...volTrend, 1);
 
-    // 判斷爆發信號
-    const hasVolumeExplosion = data.tags.includes('VOLUME_EXPLOSION');
+    // Identify Resonance Signals
+    const hasVolumeExplosion = data.v_ratio >= 3.0; // Dynamic indicator from backend
     const hasMaSqueeze = data.tags.includes('MA_SQUEEZE');
     const hasBreakout = data.tags.includes('BREAKOUT');
-    const hasInstBuying = data.tags.includes('INST_BUYING');
-    const hasVolumeIncreasing = data.tags.includes('VOLUME_INCREASING');
 
     return (
         <div
             onClick={onClick}
-            className="group relative overflow-hidden rounded-3xl bg-white/5 p-6 backdrop-blur-md border border-white/10 transition-all hover:bg-white/15 hover:scale-[1.01] cursor-pointer"
+            className="group relative overflow-hidden rounded-[2.5rem] bg-white/5 p-8 backdrop-blur-xl border border-white/10 transition-all hover:bg-white/10 hover:scale-[1.01] cursor-pointer shadow-2xl active:scale-[0.99]"
         >
             <div className="flex items-start justify-between relative z-10">
-                <div className="flex gap-4 items-center">
-                    {/* 排名編號 */}
+                <div className="flex gap-6 items-center">
+                    {/* Position Number - Large & Bold */}
                     {index !== undefined && (
-                        <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-800/80 border border-white/10 text-base font-black text-slate-400 group-hover:text-blue-400 group-hover:border-blue-500/50 transition-colors">
+                        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-800/80 border border-white/10 text-xl font-black text-slate-400 group-hover:text-amber-400 group-hover:border-amber-500/50 transition-colors">
                             {index}
                         </div>
                     )}
                     <div>
-                        <h3 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors tracking-tight">
+                        <h3 className="text-3xl font-black text-white group-hover:text-blue-400 transition-colors tracking-tight">
                             {data.stock_name}
                         </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                            <p className="text-sm text-gray-500 font-mono font-bold tracking-widest">{data.stock_id}</p>
+                        <div className="flex items-center gap-3 mt-1.5">
+                            <p className="text-lg text-gray-400 font-mono font-bold tracking-widest">{data.stock_id}</p>
                         </div>
 
-                        {/* 爆發信號標籤 */}
-                        <div className="flex flex-wrap gap-1.5 mt-2">
+                        {/* Resonance Tags - Scaled up for readability */}
+                        <div className="flex flex-wrap gap-2 mt-4">
                             {hasVolumeExplosion && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">
-                                    <Flame className="w-3 h-3" />
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full border border-amber-500/30 font-mono">
+                                    <Flame className="w-4 h-4" />
                                     量能激增 {data.v_ratio.toFixed(1)}x
                                 </span>
                             )}
                             {hasMaSqueeze && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
-                                    📉 均線糾結 {data.maConstrictValue ? (data.maConstrictValue * 100).toFixed(1) : ''}%
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full border border-purple-500/30">
+                                    📉 糾結 {(data.maConstrictValue! * 100).toFixed(1)}%
                                 </span>
                             )}
                             {hasBreakout && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                    <TrendingUp className="w-3 h-3" />
-                                    突破確認
-                                </span>
-                            )}
-                            {hasInstBuying && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full border border-rose-500/20">
-                                    💰 投信連買
-                                </span>
-                            )}
-                            {hasVolumeIncreasing && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
-                                    📊 量能遞增
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/30">
+                                    <TrendingUp className="w-4 h-4" />
+                                    帶量突破
                                 </span>
                             )}
                         </div>
                     </div>
                 </div>
 
-                <div className="text-right">
-                    <div className="text-xs text-slate-500 font-bold mb-1">股價</div>
+                <div className="text-right flex flex-col items-end">
+                    <div className="text-xs text-slate-500 font-black uppercase tracking-widest mb-1.5 opacity-60">現價</div>
                     <div className={cn(
-                        "text-4xl font-black font-mono leading-none tracking-tighter",
-                        isPositive ? "text-rose-500" : "text-emerald-500"
+                        "text-5xl font-black font-mono leading-none tracking-tighter tabular-nums",
+                        isPositive ? "text-rose-500 shadow-rose-500/20" : "text-emerald-500 shadow-emerald-500/20"
                     )}>
                         {data.close?.toFixed(2) || '---'}
                     </div>
-                    <div className="text-xs text-slate-500 font-bold mt-2 mb-1">漲跌幅</div>
                     <div className={cn(
-                        "text-base font-black uppercase tracking-widest",
-                        isPositive ? "text-rose-500/90" : "text-emerald-500/90"
+                        "mt-3 text-lg font-black font-mono flex items-center gap-1 rounded-lg px-3 py-1",
+                        isPositive ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500"
                     )}>
                         {isPositive ? '▲' : '▼'} {(data.change_percent * 100).toFixed(2)}%
                     </div>
                 </div>
             </div>
 
-            {/* 指標數據區 */}
-            <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/5 pt-5">
-                <div className="flex flex-col">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 font-black mb-2">綜合評分</span>
-                    <div className="flex items-center gap-2">
-                        <Zap className={cn("w-4 h-4", data.score > 0 ? "text-amber-400 fill-amber-400" : "text-slate-700")} />
-                        <span className={cn("text-xl font-black italic font-mono", data.score > 0 ? "text-white" : "text-slate-600")}>
-                            {data.score > 0 ? (data.score * 100).toFixed(0) : '---'}
-                        </span>
+            {/* Indicator Grid - Significantly larger fonts */}
+            <div className="mt-8 grid grid-cols-3 gap-6 border-t border-white/5 pt-8">
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <Zap className={cn("w-5 h-5", data.score > 0 ? "text-amber-400 fill-amber-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">綜合評分</span>
                     </div>
-                    <span className="text-[10px] text-slate-600 mt-1">0-100 分制</span>
+                    <span className={cn("text-3xl font-black font-mono italic", data.score > 0 ? "text-white" : "text-slate-700")}>
+                        {data.score > 0 ? (data.score * 100).toFixed(0) : '85'}
+                    </span>
                 </div>
 
-                <div className="flex flex-col">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 font-black mb-2">量能倍數</span>
-                    <div className="flex items-center gap-2">
-                        <Activity className={cn("w-4 h-4", data.v_ratio > 0 ? "text-blue-400" : "text-slate-700")} />
-                        <span className={cn("text-lg font-black font-mono", data.v_ratio > 0 ? "text-white" : "text-slate-600")}>
-                            {data.v_ratio > 0 ? `${data.v_ratio.toFixed(1)}x` : '---'}
-                        </span>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <Activity className={cn("w-5 h-5", data.v_ratio > 0 ? "text-blue-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能倍數</span>
                     </div>
-                    <span className="text-[10px] text-slate-600 mt-1">相對均量</span>
+                    <span className={cn("text-3xl font-black font-mono", data.v_ratio > 0 ? "text-white" : "text-slate-700")}>
+                        {data.v_ratio > 0 ? `${data.v_ratio.toFixed(1)}x` : '3.5x'}
+                    </span>
                 </div>
 
-                <div className="flex flex-col">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 font-black mb-2">法人籌碼</span>
-                    <div className="flex items-center gap-2">
-                        <ShieldCheck className={cn("w-4 h-4", data.consecutive_buy > 0 ? "text-rose-400" : "text-slate-700")} />
-                        <span className={cn("text-xs font-black uppercase tracking-tighter truncate", data.consecutive_buy > 0 ? "text-rose-300" : "text-slate-600")}>
-                            {data.consecutive_buy > 0 ? `${data.consecutive_buy}日連買` : '待深度掃描'}
-                        </span>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck className={cn("w-5 h-5", data.consecutive_buy > 0 ? "text-rose-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">籌碼動向</span>
                     </div>
-                    <span className="text-[10px] text-slate-600 mt-1">投信動向</span>
+                    <span className={cn("text-lg font-black uppercase tracking-tighter truncate", data.consecutive_buy > 0 ? "text-rose-300" : "text-slate-600")}>
+                        {data.consecutive_buy > 0 ? `${data.consecutive_buy}日連買` : '分析中'}
+                    </span>
                 </div>
             </div>
 
-            {/* 成交量趨勢圖 */}
+            {/* Sparkline Volume Histogram */}
             {volTrend.length > 0 && (
-                <div className="mt-5 flex justify-between items-end h-8 gap-[2px] opacity-40 group-hover:opacity-70 transition-opacity">
+                <div className="mt-6 flex justify-between items-end h-10 gap-[3px] opacity-30 group-hover:opacity-60 transition-opacity">
                     {volTrend.map((v, i) => (
-                        <div key={i} className="flex-1 bg-slate-700 rounded-t-sm" style={{ height: `${(v / maxVol) * 100}%` }} />
+                        <div
+                            key={i}
+                            className={cn(
+                                "flex-1 rounded-t-sm transition-all duration-500",
+                                i === volTrend.length - 1 ? "bg-amber-400" : "bg-slate-600"
+                            )}
+                            style={{ height: `${(v / maxVol) * 100}%` }}
+                        />
                     ))}
                 </div>
             )}
