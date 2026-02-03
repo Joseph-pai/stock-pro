@@ -1,0 +1,73 @@
+/**
+ * Taiwan Stock Market Sectors & Market Types
+ */
+
+export type MarketType = 'TWSE' | 'TPEX';
+
+export const MARKET_NAMES: Record<MarketType, string> = {
+    TWSE: '上市 (TWSE)',
+    TPEX: '上櫃 (TPEX)'
+};
+
+// Common Sectors Mapping (Mapped to TWSE/TPEX type codes)
+export const SECTORS = {
+    TWSE: [
+        { id: 'ALL', name: '全部類股' },
+        { id: '01', name: '水泥工業' },
+        { id: '02', name: '食品工業' },
+        { id: '03', name: '塑膠工業' },
+        { id: '04', name: '紡織纖維' },
+        { id: '05', name: '電機機械' },
+        { id: '06', name: '電器電覽' },
+        { id: '07', name: '化學工業' },
+        { id: '08', name: '玻璃陶瓷' },
+        { id: '09', name: '造紙工業' },
+        { id: '10', name: '鋼鐵工業' },
+        { id: '11', name: '橡膠工業' },
+        { id: '12', name: '汽車工業' },
+        { id: '13', name: '電子全部' },
+        { id: '24', name: '半導體業' },
+        { id: '25', name: '電腦週邊' },
+        { id: '26', name: '光電業' },
+        { id: '27', name: '通信網路' },
+        { id: '28', name: '電子零組件' },
+        { id: '29', name: '電子通路' },
+        { id: '30', name: '資訊服務' },
+        { id: '31', name: '其他電子' },
+        { id: '14', name: '建材營造' },
+        { id: '15', name: '航運業' },
+        { id: '16', name: '觀光事業' },
+        { id: '17', name: '金融保險' },
+        { id: '18', name: '貿易百貨' },
+        { id: '20', name: '其他' },
+    ],
+    TPEX: [
+        { id: 'AL', name: '全部類股' },
+        { id: '02', name: '食品工業' },
+        { id: '03', name: '塑膠工業' },
+        { id: '04', name: '紡織纖維' },
+        { id: '05', name: '電機機械' },
+        { id: '06', name: '電器電纜' },
+        { id: '07', name: '化學工業' },
+        { id: '08', name: '玻璃陶瓷' },
+        { id: '10', name: '鋼鐵工業' },
+        { id: '11', name: '橡膠工業' },
+        { id: '12', name: '汽車工業' },
+        { id: '21', name: '化學工業' },
+        { id: '22', name: '生技醫療' },
+        { id: '24', name: '半導體業' },
+        { id: '25', name: '電腦週邊' },
+        { id: '26', name: '光電業' },
+        { id: '27', name: '通信網路' },
+        { id: '28', name: '電子零組件' },
+        { id: '29', name: '電子通路' },
+        { id: '30', name: '資訊服務' },
+        { id: '31', name: '其他電子' },
+        { id: '14', name: '建材營造' },
+        { id: '15', name: '航運業' },
+        { id: '16', name: '觀光事業' },
+        { id: '17', name: '金融保險' },
+        { id: '18', name: '貿易百貨' },
+        { id: '20', name: '其他' },
+    ]
+};
