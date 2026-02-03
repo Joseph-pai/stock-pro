@@ -18,14 +18,36 @@ export const ScannerService = {
 
         // 1. Fetch Latest Market Data (Day 0)
         let latestData: StockData[] = [];
-        try {
-            latestData = await ExchangeClient.getAllMarketQuotes();
-        } catch (e: any) {
-            console.error('Failed to fetch market data:', e.message);
-            throw new Error(`Market data unavailable: ${e.message}`);
+        let effectiveDate = new Date();
+        let attempts = 0;
+        let found = false;
+
+        // Try up to 5 days back to find the latest trading day
+        while (!found && attempts < 5) {
+            if (!isWeekend(effectiveDate)) {
+                const dateStr = format(effectiveDate, 'yyyyMMdd');
+                try {
+                    console.log(`Attempting to fetch market data for ${dateStr}...`);
+                    latestData = await ExchangeClient.getAllMarketQuotes(dateStr);
+                    if (latestData && latestData.length > 0) {
+                        found = true;
+                        console.log(`Successfully fetched data for ${dateStr}`);
+                        break;
+                    }
+                } catch (e: any) {
+                    console.warn(`Fetch failed for ${dateStr}: ${e.message}`);
+                }
+            }
+
+            if (!found) {
+                effectiveDate = subDays(effectiveDate, 1);
+                attempts++;
+            }
         }
 
-        if (latestData.length === 0) throw new Error(`Market data not found.`);
+        if (!found || latestData.length === 0) {
+            throw new Error(`Market data not found after ${attempts} attempts. Please check internet or Exchange status.`);
+        }
 
         // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)
         // Also ensure Close > Open (Red Candle) and Price > 10 (avoid penny stocks if needed, optional)
@@ -50,7 +72,7 @@ export const ScannerService = {
         // Fetch past dates
         // Note: This involves serialized requests or parallel. Parallel limit 3-5 to be nice.
         const pastDates: string[] = [];
-        let d = new Date();
+        let d = effectiveDate; // Start from the valid data date
         let daysFound = 0;
         let lookback = 1;
 
