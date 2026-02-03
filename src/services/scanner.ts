@@ -26,7 +26,7 @@ export const ScannerService = {
         console.log('[Scanner] Stage 1: Discovery - 兩階段篩選（快速預篩 + 嚴格驗證）...');
 
         // Phase 1: 快速預篩（使用快照數據）
-        const snapshot = await ExchangeClient.getAllMarketQuotes();
+        const snapshot = await ExchangeClient.getAllMarketQuotes('TWSE'); // Add default market to fix build
         const t1 = Date.now();
 
         if (snapshot.length === 0) {

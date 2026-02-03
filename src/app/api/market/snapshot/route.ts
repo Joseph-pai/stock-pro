@@ -6,21 +6,25 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const market = searchParams.get('market') || 'ALL';
+        const market = searchParams.get('market') as 'TWSE' | 'TPEX';
+        const sector = searchParams.get('sector') || (market === 'TWSE' ? 'ALL' : 'AL');
 
-        console.log(`[API] Fetching market snapshot for: ${market}`);
+        console.log(`[Snapshot API] Targeting ${market} - SubSector: ${sector}`);
 
-        const snapshot = await ExchangeClient.getAllMarketQuotes(market);
+        let data = [];
+        if (sector === 'ALL' || sector === 'AL') {
+            data = await ExchangeClient.getAllMarketQuotes(market);
+        } else {
+            data = await ExchangeClient.getQuotesBySector(market, sector);
+        }
 
         return NextResponse.json({
             success: true,
-            data: snapshot,
-            count: snapshot.length
+            data,
+            count: data.length
         });
     } catch (error: any) {
-        return NextResponse.json({
-            success: false,
-            error: error.message
-        }, { status: 500 });
+        console.error('[Snapshot API] Fatal Error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

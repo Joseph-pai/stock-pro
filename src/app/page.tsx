@@ -2,9 +2,9 @@
 
 import { StockCard } from '@/components/dashboard/StockCard';
 import { AnalysisResult, StockData } from '@/types';
-import { TAIWAN_SECTORS, MarketType, getMarketName } from '@/lib/sectors';
-import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { SECTORS, MarketType, MARKET_NAMES } from '@/lib/sectors';
+import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3 } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
 
@@ -17,9 +17,9 @@ interface ScanSettings {
 }
 
 const DEFAULT_SETTINGS: ScanSettings = {
-  volumeRatio: 2.0, // Set more lenient default for discovery
-  maConstrict: 3.0,
-  breakoutPercent: 1.5
+  volumeRatio: 2.0,
+  maConstrict: 2.0,
+  breakoutPercent: 3.0 // Default 3% as requested
 };
 
 export default function DashboardPage() {
@@ -34,8 +34,13 @@ export default function DashboardPage() {
   const [hasScanned, setHasScanned] = useState(false);
 
   // Market Filters
-  const [market, setMarket] = useState<MarketType>('ALL');
-  const [sector, setSector] = useState<string>('00');
+  const [market, setMarket] = useState<MarketType>('TWSE');
+  const [sector, setSector] = useState<string>('ALL');
+
+  // Reset sector when market changes
+  useEffect(() => {
+    setSector(market === 'TWSE' ? 'ALL' : 'AL');
+  }, [market]);
 
   const runScan = async () => {
     setStage('fetching');
@@ -45,32 +50,38 @@ export default function DashboardPage() {
     const t0 = Date.now();
 
     try {
-      // 1. Fetch Snapshot (Targeted Market)
-      setProgress({ current: 0, total: 0, phase: `正在獲取 ${getMarketName(market)} 市場數據...` });
-      const snapshotRes = await fetch(`/api/market/snapshot?market=${market}`);
+      // Phase 1: Directed Fetch (No more full market snapshot if sector is selected)
+      const sectorName = SECTORS[market].find(s => s.id === sector)?.name || '該類股';
+      setProgress({ current: 0, total: 0, phase: `正在獲取 ${MARKET_NAMES[market]} - ${sectorName} 數據...` });
+
+      const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}`);
       const snapshotJson = await snapshotRes.json();
       if (!snapshotJson.success) throw new Error(snapshotJson.error);
 
       const snapshot: StockData[] = snapshotJson.data;
       const t1 = Date.now();
 
-      // 2. Pre-filter by Sector & Basic technicals
+      // Phase 2: Candidate Filtering
+      if (snapshot.length === 0) {
+        throw new Error("沒找到任何股票，請確認市場與類股選擇是否正確。");
+      }
+
       setStage('filtering');
-      setProgress({ current: 0, total: snapshot.length, phase: '正在篩選候選清單...' });
+      setProgress({ current: 0, total: snapshot.length, phase: '正在篩選潛力候選股...' });
 
       const candidates = snapshot
         .filter(s => {
-          // Simplified logic: filter by segment if needed, volume > 1000, red k
           const isRedK = s.close >= s.open;
-          const isVolActive = s.Trading_Volume >= 1000;
-          return isRedK && isVolActive;
+          const isVolActive = s.Trading_Volume >= 1.0; // 至少 1000 股
+          const isStrong = (s.close - s.open) / s.open >= 0.005; // 至少漲 0.5% 才進入深度分析
+          return isRedK && isVolActive && isStrong;
         })
         .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-        .slice(0, 80); // Take top 80 for deep analysis
+        .slice(0, 100); // Take top 100 for deep resonance check
 
-      // 3. Batched Deep Analysis (to avoid Netlify 10s timeout)
+      // Phase 3: Batched Resonance Analysis (VolumeExplosion + MaSqueeze + Breakout)
       setStage('analyzing');
-      const BATCH_SIZE = 15;
+      const BATCH_SIZE = 12;
       const allResults: AnalysisResult[] = [];
       const t2_start = Date.now();
 
@@ -79,7 +90,7 @@ export default function DashboardPage() {
         setProgress({
           current: i + batch.length,
           total: candidates.length,
-          phase: `深度分析進行中 (${i + batch.length}/${candidates.length})`
+          phase: `三大信號共振分析中 (${i + batch.length}/${candidates.length})`
         });
 
         const batchRes = await fetch('/api/scan/analyze', {
@@ -112,7 +123,7 @@ export default function DashboardPage() {
 
     } catch (e: any) {
       console.error(e);
-      setError("掃描出錯: " + e.message);
+      setError(e.message);
       setStage('idle');
     }
   };
@@ -127,169 +138,211 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-6 py-12 max-w-3xl">
-      {/* Dynamic Header */}
+      {/* Header */}
       <header className="mb-14 text-center">
-        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-8">
+        <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-blue-500/10 border-2 border-blue-500/30 mb-8 shadow-lg shadow-blue-500/10">
           <Sparkles className="w-6 h-6 text-blue-400" />
-          <span className="text-base font-black text-blue-400 uppercase tracking-widest">
-            {results.length > 0 ? `發現 ${results.length} 支強勢潛力股` : 'AI 爆發預警系統'}
+          <span className="text-lg font-black text-blue-400 uppercase tracking-widest">
+            {results.length > 0 ? `發現 ${results.length} 支全信號共振股` : '定向定向掃描系統 v2.0'}
           </span>
         </div>
-        <h1 className="text-5xl md:text-6xl font-black bg-gradient-to-br from-white via-white to-blue-500 bg-clip-text text-transparent mb-6 leading-tight">
-          台股爆發前兆掃描
+        <h1 className="text-6xl md:text-7xl font-black bg-gradient-to-br from-white via-white to-blue-500 bg-clip-text text-transparent mb-8 tracking-tighter">
+          爆發信號定位器
         </h1>
-        <p className="text-slate-400 text-xl font-medium max-w-xl mx-auto">
-          全市場上市櫃掃描，定位量能倍增、均線糾結與技術突破的完美共振點。
+        <p className="text-slate-400 text-2xl font-black max-w-2xl mx-auto leading-relaxed">
+          量能激增・均線糾結・技術突破<br />
+          <span className="text-white/60 text-lg font-medium">三大信號完美重疊，定位噴出奇點。</span>
         </p>
       </header>
 
-      {/* Primary Filters - Larger & Bolder */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        <div className="space-y-3">
-          <label className="text-lg font-black text-slate-300 ml-2">掃描市場</label>
-          <select
-            value={market}
-            onChange={(e) => setMarket(e.target.value as MarketType)}
-            className="w-full bg-slate-900 border-2 border-slate-800 rounded-[1.5rem] p-5 text-xl font-black text-white focus:border-blue-500 outline-none transition-all appearance-none shadow-xl cursor-pointer"
-          >
-            <option value="ALL">上市 + 上櫃 (全市場)</option>
-            <option value="TWSE">上市 (TWSE)</option>
-            <option value="TPEX">上櫃 (TPEX)</option>
-          </select>
-        </div>
-        <div className="space-y-3">
-          <label className="text-lg font-black text-slate-300 ml-2">產業類型</label>
-          <select
-            value={sector}
-            disabled
-            className="w-full bg-slate-900 border-2 border-slate-800 rounded-[1.5rem] p-5 text-xl font-black text-slate-500 outline-none appearance-none shadow-xl opacity-60"
-          >
-            <option value="00">全部類股 (目前支持全產業)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Advanced Settings Toggle */}
-      <div className="mb-8">
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="flex items-center justify-between w-full px-6 py-4 bg-slate-900/40 border border-slate-800/50 rounded-2xl hover:bg-slate-800/50 transition-all text-lg font-black text-slate-400 hover:text-blue-400"
-        >
-          <div className="flex items-center gap-3">
-            <Settings className="w-6 h-6" />
-            <span>自定義信號閥值</span>
-          </div>
-          <span className="text-sm font-mono font-bold text-slate-600">
-            量能 {settings.volumeRatio}x / 突破 {settings.breakoutPercent}%
-          </span>
-        </button>
-
-        {showSettings && (
-          <div className="mt-4 p-8 bg-slate-900/80 border-2 border-slate-800 rounded-3xl space-y-8 animate-in fade-in slide-in-from-top-4">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-black text-slate-200">量能激增倍數 (V-Ratio)</span>
-                <span className="text-2xl font-black text-amber-400">{settings.volumeRatio}x</span>
-              </div>
-              <input
-                type="range" min="1.0" max="5.0" step="0.5"
-                value={settings.volumeRatio}
-                onChange={(e) => setSettings({ ...settings, volumeRatio: parseFloat(e.target.value) })}
-                className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-              />
+      {/* Target Control Center */}
+      <div className="bg-slate-900 border-2 border-slate-800 rounded-[3rem] p-10 mb-12 shadow-2xl space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="w-5 h-5 text-blue-400" />
+              <label className="text-xl font-black text-white">指定市場</label>
             </div>
+            <div className="relative group">
+              <select
+                value={market}
+                onChange={(e) => setMarket(e.target.value as MarketType)}
+                className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-2xl font-black text-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer shadow-xl"
+              >
+                <option value="TWSE">{MARKET_NAMES.TWSE}</option>
+                <option value="TPEX">{MARKET_NAMES.TPEX}</option>
+              </select>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
+            </div>
+          </div>
 
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-5 h-5 text-amber-400" />
+              <label className="text-xl font-black text-white">產業類型</label>
+            </div>
+            <div className="relative group">
+              <select
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+                className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-2xl font-black text-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer shadow-xl"
+              >
+                {SECTORS[market].map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Resonance Settings */}
+        <div className="bg-black/20 rounded-[2.5rem] p-8 border border-white/5 space-y-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Settings className="w-6 h-6 text-slate-500" />
+              <span className="text-xl font-black text-slate-300">信號閾值配置</span>
+            </div>
+            <button
+              onClick={() => setSettings(DEFAULT_SETTINGS)}
+              className="text-sm font-black text-blue-500 hover:text-blue-400 underline underline-offset-4"
+            >
+              恢復預設
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10">
+            {/* 1. Volume */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-black text-slate-200">突破幅度 (收盤漲幅)</span>
-                <span className="text-2xl font-black text-emerald-400">{settings.breakoutPercent}%</span>
+                <span className="text-lg font-black text-slate-400">❶ 量能激增倍數 (V-Ratio)</span>
+                <span className="text-3xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
               </div>
               <input
                 type="range" min="1.0" max="6.0" step="0.5"
-                value={settings.breakoutPercent}
-                onChange={(e) => setSettings({ ...settings, breakoutPercent: parseFloat(e.target.value) })}
-                className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                value={settings.volumeRatio}
+                onChange={(e) => setSettings({ ...settings, volumeRatio: parseFloat(e.target.value) })}
+                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-amber-500"
               />
             </div>
 
-            <button
-              onClick={() => setSettings(DEFAULT_SETTINGS)}
-              className="w-full text-center text-sm font-bold text-slate-500 hover:text-blue-400"
-            >
-              恢復專業推薦配置
-            </button>
+            {/* 2. Squeeze */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-black text-slate-400">❷ 均線糾結度 (MA Gap)</span>
+                <span className="text-3xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
+              </div>
+              <input
+                type="range" min="0.5" max="5.0" step="0.5"
+                value={settings.maConstrict}
+                onChange={(e) => setSettings({ ...settings, maConstrict: parseFloat(e.target.value) })}
+                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-purple-500"
+              />
+            </div>
+
+            {/* 3. Breakout */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-black text-slate-400">❸ 指標突破幅度 (漲幅)</span>
+                <span className="text-3xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
+              </div>
+              <input
+                type="range" min="1.0" max="8.0" step="0.5"
+                value={settings.breakoutPercent}
+                onChange={(e) => setSettings({ ...settings, breakoutPercent: parseFloat(e.target.value) })}
+                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-emerald-500"
+              />
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Main Action Button */}
+      {/* Execute Button */}
       <button
         onClick={runScan}
         disabled={isWorking}
         className={clsx(
-          "w-full flex flex-col items-center justify-center p-8 rounded-[2rem] border-4 transition-all active:scale-[0.98] mb-10 group shadow-2xl",
-          results.length > 0
-            ? "bg-blue-600 border-blue-400 text-white shadow-blue-500/20"
-            : "bg-slate-900 border-slate-800 text-slate-400 hover:border-blue-500/50 hover:bg-slate-800"
+          "w-full flex flex-col items-center justify-center p-10 rounded-[3rem] border-4 transition-all active:scale-[0.98] mb-12 group shadow-2xl relative overflow-hidden",
+          isWorking
+            ? "bg-slate-900 border-slate-800 cursor-not-allowed"
+            : "bg-gradient-to-r from-blue-700 to-blue-500 border-blue-400 text-white shadow-blue-500/40 hover:scale-[1.02]"
         )}
       >
-        {isWorking ? <Loader2 className="w-10 h-10 animate-spin mb-2" /> : <Flame className="w-10 h-10 mb-2 group-hover:scale-110 transition-transform" />}
-        <span className="text-2xl font-black uppercase tracking-tight">啟動三大信號掃描</span>
-        <span className="text-base font-bold text-slate-500 group-hover:text-slate-400 mt-2">
-          即時計算上市櫃 2000+ 支個股數據
+        {isWorking ? <Loader2 className="w-12 h-12 animate-spin mb-3" /> : <Flame className="w-12 h-12 mb-3 group-hover:scale-125 transition-transform" />}
+        <span className="text-3xl font-black uppercase tracking-widest">啟動三大共振定點掃描</span>
+        <span className="text-lg font-bold text-white/60 mt-3">
+          已鎖定：{MARKET_NAMES[market]}
         </span>
       </button>
 
-      {/* Progress & Search */}
-      <div className="space-y-6 mb-10">
+      {/* Progress & Search (Integrated Panel) */}
+      <div className="space-y-8 mb-12">
         {isWorking && (
-          <div className="p-8 bg-slate-900 border-2 border-slate-800 rounded-[2rem] space-y-4 shadow-xl">
+          <div className="p-10 bg-slate-900 border-2 border-slate-800 rounded-[3rem] space-y-6 shadow-2xl">
             <div className="flex items-center justify-between">
-              <span className="text-lg font-black text-blue-400 animate-pulse">{progress.phase}</span>
-              <span className="font-mono font-bold text-slate-500">{progress.current} / {progress.total}</span>
+              <div className="flex items-center gap-4">
+                <div className="w-4 h-4 bg-blue-500 rounded-full animate-ping" />
+                <span className="text-2xl font-black text-blue-400">{progress.phase}</span>
+              </div>
+              <span className="text-xl font-mono font-black text-slate-500 tracking-tighter">
+                {Math.round((progress.current / progress.total) * 100 || 0)}%
+              </span>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden">
+            <div className="w-full bg-slate-800 rounded-full h-6 overflow-hidden border-2 border-white/5">
               <div
-                className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 transition-all duration-300"
-                style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '20%' }}
+                className="h-full bg-gradient-to-r from-blue-600 via-purple-600 to-amber-500 transition-all duration-500 ease-out"
+                style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '15%' }}
               />
             </div>
           </div>
         )}
 
-        <div className="relative group">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
+        <div className="relative group shadow-2xl">
+          <Search className="absolute left-8 top-1/2 -translate-y-1/2 w-8 h-8 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
           <input
             type="text"
-            placeholder="輸入股票代碼或名稱過濾結果..."
+            placeholder="輸入股票代碼或名稱快速查找..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900/50 border-2 border-slate-800 rounded-[1.5rem] py-5 pl-16 pr-8 text-xl font-bold focus:border-blue-500 outline-none transition-all placeholder:text-slate-600"
+            className="w-full bg-slate-900 border-4 border-slate-800 rounded-[2.5rem] py-7 pl-20 pr-10 text-2xl font-black focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 text-white"
           />
         </div>
       </div>
 
-      {/* Results or Empty State */}
-      <div className="space-y-8">
-        {!hasScanned && !isWorking ? (
-          <div className="py-32 text-center border-4 border-dashed border-slate-900 rounded-[3rem] bg-slate-900/10">
-            <TrendingUp className="w-20 h-20 text-slate-800 mx-auto mb-6 opacity-40" />
-            <p className="text-2xl font-black text-slate-300">系統等待啟動</p>
-            <p className="text-slate-500 text-lg font-bold mt-3 px-16 leading-relaxed">
-              請選擇掃描市場並設定偏好，點擊上方按鈕開始 AI 高頻運算。
-            </p>
+      {/* Results Container */}
+      <div className="space-y-10">
+        {error && (
+          <div className="p-10 bg-rose-500/10 border-4 border-rose-500/20 rounded-[3rem] text-center">
+            <p className="text-2xl font-black text-rose-400">{error}</p>
+            <button onClick={runScan} className="mt-4 text-rose-500 underline font-black">點擊重試</button>
           </div>
-        ) : filteredResults.length === 0 && !isWorking ? (
-          <div className="py-32 text-center border-4 border-dashed border-rose-900/20 rounded-[3rem] bg-rose-500/5">
-            <div className="text-8xl mb-8">📊</div>
-            <p className="text-rose-400 font-black text-4xl">無符合條件個股</p>
-            <p className="text-slate-400 text-xl font-bold mt-6 px-16 leading-relaxed">
-              已完成 {timing?.totalStocks} 支股票分析，但目前市場無同時符合三大信號的個股。
-              <br /><span className="text-blue-400 mt-4 block">建議：嘗試調低「量能倍數」或「突破幅度」設定。</span>
-            </p>
+        )}
+
+        {!hasScanned && !isWorking && !error ? (
+          <div className="py-40 text-center border-4 border-dashed border-slate-900 rounded-[4rem] bg-slate-900/10 opacity-60">
+            <TrendingUp className="w-24 h-24 text-slate-800 mx-auto mb-8" />
+            <p className="text-3xl font-black text-slate-400">等待定點掃描任務</p>
+            <p className="text-slate-600 text-xl font-black mt-4">請選定目標後按下啟動鈕</p>
+          </div>
+        ) : filteredResults.length === 0 && hasScanned && !isWorking ? (
+          <div className="py-40 text-center border-4 border-dashed border-rose-900/30 rounded-[4rem] bg-rose-500/5">
+            <div className="text-9xl mb-10">🔍</div>
+            <p className="text-rose-400 font-black text-5xl mb-6">沒有符合的高共振股票</p>
+            <div className="max-w-md mx-auto space-y-4">
+              <p className="text-slate-500 text-2xl font-black">
+                已分析 {timing?.totalStocks} 支股票，但在目前參數下未發現完美共振標的。
+              </p>
+              <div className="p-6 bg-blue-500/10 rounded-3xl border border-blue-500/20 mt-8">
+                <p className="text-blue-400 text-lg font-black">
+                  💡 策略建議：<br />
+                  1. 調低「量能激增倍數」至 1.5x<br />
+                  2. 放寬「均線糾結度」至 3.0%
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {filteredResults.map((stock, index) => (
               <Link key={stock.stock_id} href={`/chart/${stock.stock_id}`}>
                 <StockCard data={stock} index={index + 1} />
@@ -299,19 +352,20 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Performance Footer */}
+      {/* Pro Timing Footer */}
       {timing && !isWorking && (
-        <footer className="mt-16 pt-8 border-t border-white/5 text-center flex flex-col items-center gap-4">
-          <div className="flex gap-4 text-xs font-mono font-bold text-slate-600">
-            <span>網速響應: {timing.snapshot}ms</span>
-            <span>|</span>
-            <span>AI運算: {timing.analyze}ms</span>
-            <span>|</span>
-            <span>樣本數: {timing.totalStocks}</span>
+        <footer className="mt-20 pt-10 border-t border-white/5 flex flex-col items-center gap-6">
+          <div className="flex flex-wrap justify-center gap-8 text-sm font-black font-mono text-slate-600 uppercase tracking-tighter">
+            <span className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">SNAPSHOT: {timing.snapshot}MS</span>
+            <span className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">DEEP_AI: {timing.analyze}MS</span>
+            <span className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">SAMPLES: {timing.totalStocks}</span>
           </div>
-          <p className="text-slate-700 text-xs font-bold tracking-tighter">
-            Antigravity Scanning Engine v7.2-BETA | {new Date().toLocaleTimeString()}
-          </p>
+          <div className="flex items-center gap-4 py-4 px-8 bg-blue-500/5 rounded-full border border-blue-500/10">
+            <Sparkles className="w-5 h-5 text-blue-500" />
+            <p className="text-slate-500 text-sm font-black tracking-widest uppercase">
+              Antigravity Resonance Engine v8.0 | {new Date().toLocaleDateString()}
+            </p>
+          </div>
         </footer>
       )}
     </div>

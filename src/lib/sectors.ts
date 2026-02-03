@@ -1,52 +1,73 @@
-export const MarketTypeCodes = {
-    ALL: 'ALL',
-    TWSE: 'TWSE',
-    TPEX: 'TPEX'
-} as const;
+/**
+ * Taiwan Stock Market Sectors & Market Types
+ */
 
-export type MarketType = keyof typeof MarketTypeCodes;
+export type MarketType = 'TWSE' | 'TPEX';
 
-export const TAIWAN_SECTORS = {
-    '00': '全部類股',
-    '01': '水泥工業',
-    '02': '食品工業',
-    '03': '塑膠工業',
-    '04': '紡織纖維',
-    '05': '電機機械',
-    '06': '電器電纜',
-    '07': '化學工業',
-    '08': '玻璃陶瓷',
-    '09': '造紙工業',
-    '10': '鋼鐵工業',
-    '11': '橡膠工業',
-    '12': '汽車工業',
-    '13': '電子工業',
-    '14': '建材營造',
-    '15': '航運業',
-    '16': '觀光餐旅',
-    '17': '金融保險',
-    '18': '貿易百貨',
-    '19': '綜合',
-    '20': '其他',
-    '21': '化學',
-    '22': '生技醫療',
-    '23': '油電燃氣',
-    '24': '半導體',
-    '25': '電腦週邊',
-    '26': '光電業',
-    '27': '通信網路',
-    '28': '電子零組件',
-    '29': '電子通路',
-    '30': '資訊服務',
-    '31': '其他電子',
+export const MARKET_NAMES: Record<MarketType, string> = {
+    TWSE: '上市 (TWSE)',
+    TPEX: '上櫃 (TPEX)'
 };
 
-export function getMarketName(market: MarketType): string {
-    if (market === 'TWSE') return '上市';
-    if (market === 'TPEX') return '上櫃';
-    return '全市場';
-}
-
-export function getSectorName(code: string): string {
-    return TAIWAN_SECTORS[code as keyof typeof TAIWAN_SECTORS] || '全部類股';
-}
+// Common Sectors Mapping (Mapped to TWSE/TPEX type codes)
+export const SECTORS = {
+    TWSE: [
+        { id: 'ALL', name: '全部類股' },
+        { id: '01', name: '水泥工業' },
+        { id: '02', name: '食品工業' },
+        { id: '03', name: '塑膠工業' },
+        { id: '04', name: '紡織纖維' },
+        { id: '05', name: '電機機械' },
+        { id: '06', name: '電器電覽' },
+        { id: '07', name: '化學工業' },
+        { id: '08', name: '玻璃陶瓷' },
+        { id: '09', name: '造紙工業' },
+        { id: '10', name: '鋼鐵工業' },
+        { id: '11', name: '橡膠工業' },
+        { id: '12', name: '汽車工業' },
+        { id: '13', name: '電子全部' },
+        { id: '24', name: '半導體業' },
+        { id: '25', name: '電腦週邊' },
+        { id: '26', name: '光電業' },
+        { id: '27', name: '通信網路' },
+        { id: '28', name: '電子零組件' },
+        { id: '29', name: '電子通路' },
+        { id: '30', name: '資訊服務' },
+        { id: '31', name: '其他電子' },
+        { id: '14', name: '建材營造' },
+        { id: '15', name: '航運業' },
+        { id: '16', name: '觀光事業' },
+        { id: '17', name: '金融保險' },
+        { id: '18', name: '貿易百貨' },
+        { id: '20', name: '其他' },
+    ],
+    TPEX: [
+        { id: 'AL', name: '全部類股' },
+        { id: '02', name: '食品工業' },
+        { id: '03', name: '塑膠工業' },
+        { id: '04', name: '紡織纖維' },
+        { id: '05', name: '電機機械' },
+        { id: '06', name: '電器電纜' },
+        { id: '07', name: '化學工業' },
+        { id: '08', name: '玻璃陶瓷' },
+        { id: '10', name: '鋼鐵工業' },
+        { id: '11', name: '橡膠工業' },
+        { id: '12', name: '汽車工業' },
+        { id: '21', name: '化學工業' },
+        { id: '22', name: '生技醫療' },
+        { id: '24', name: '半導體業' },
+        { id: '25', name: '電腦週邊' },
+        { id: '26', name: '光電業' },
+        { id: '27', name: '通信網路' },
+        { id: '28', name: '電子零組件' },
+        { id: '29', name: '電子通路' },
+        { id: '30', name: '資訊服務' },
+        { id: '31', name: '其他電子' },
+        { id: '14', name: '建材營造' },
+        { id: '15', name: '航運業' },
+        { id: '16', name: '觀光事業' },
+        { id: '17', name: '金融保險' },
+        { id: '18', name: '貿易百貨' },
+        { id: '20', name: '其他' },
+    ]
+};
