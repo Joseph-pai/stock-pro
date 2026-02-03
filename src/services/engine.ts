@@ -9,22 +9,13 @@ interface StockHistory {
 
 /**
  * Kelly Criterion Calculation
- * f* = (bp - q) / b
- * b = odds (Target / StopLoss)
- * p = probability (Win Rate)
- * q = 1 - p
  */
 const calculateKelly = (score: number, close: number, ma5: number): AnalysisResult['kellyResult'] => {
-    // 1. Estimate Win Rate (p) based on Technical Score
-    // Score 0.7+ -> 60% win rate, 0.9+ -> 75%
-    let winRate = 0.45; // Default slightly bear/neutral
+    let winRate = 0.45;
     if (score >= 0.8) winRate = 0.75;
     else if (score >= 0.6) winRate = 0.60;
     else if (score >= 0.4) winRate = 0.50;
 
-    // 2. Estimate Risk/Reward (b)
-    // Target: +10% (Momentum burst)
-    // Stop: Lower of (5MA or -3%)
     const targetPrice = close * 1.10;
     const stopLoss = Math.min(ma5, close * 0.97);
 
@@ -33,21 +24,17 @@ const calculateKelly = (score: number, close: number, ma5: number): AnalysisResu
 
     if (potentialLoss <= 0) return { action: 'Avoid', percentage: 0, winRate, riskRewardRatio: 0 };
 
-    const b = potentialProfit / potentialLoss; // Odds
+    const b = potentialProfit / potentialLoss;
     const q = 1 - winRate;
 
-    // Kelly Formula
     let f = (b * winRate - q) / b;
-
-    // Half-Kelly for safety (crypto/stock volatility)
     f = f * 0.5;
 
     let action: 'Invest' | 'Wait' | 'Avoid' = 'Wait';
     if (f > 0.3) action = 'Invest';
-    else if (f > 0) action = 'Invest'; // Small position
+    else if (f > 0) action = 'Invest';
     else action = 'Avoid';
 
-    // Cap at 20% max allocation per stock for safety
     const percentage = Math.max(0, Math.min(f * 100, 20));
 
     return {
@@ -60,30 +47,24 @@ const calculateKelly = (score: number, close: number, ma5: number): AnalysisResu
 
 export const evaluateStock = (stockId: string, history: StockHistory): AnalysisResult | null => {
     const { prices, insts } = history;
-    // Stage 1 scan might only have 10 days, Detailed view has 60+
     if (prices.length < 5) return null;
 
     const today = prices[prices.length - 1];
 
     // --- 1. Volume Analysis ---
-    // Use available history up to 20 days
     const histLen = prices.length;
     const volLookback = Math.min(20, histLen - 1);
     const pastPrices = prices.slice(histLen - 1 - volLookback, histLen - 1);
     const pastVolumes = pastPrices.map(p => p.Trading_Volume);
     const vRatio = pastVolumes.length > 0 ? calculateVolumeRatio(today.Trading_Volume, pastVolumes) : 1;
-
-    // Daily Volume Trend (Last 10 days)
     const dailyVolumeTrend = prices.slice(Math.max(0, histLen - 10)).map(p => p.Trading_Volume);
 
     // --- 2. MA Analysis ---
     const closePrices = prices.map(p => p.close);
     const recent20 = closePrices.slice(Math.max(0, closePrices.length - 20));
-
-    // Calculate MAs safely even with short history
     const ma5 = calculateSMA(recent20.slice(Math.max(0, recent20.length - 5)), 5);
     const ma10 = calculateSMA(recent20.slice(Math.max(0, recent20.length - 10)), 10);
-    const ma20 = calculateSMA(recent20, 20); // Might be null if < 20 days
+    const ma20 = calculateSMA(recent20, 20);
 
     let isAligned = false;
     let isBreakout = false;
@@ -93,29 +74,20 @@ export const evaluateStock = (stockId: string, history: StockHistory): AnalysisR
         isAligned = maCheck.isAligned;
         isBreakout = maCheck.isBreakout;
     } else if (ma5 && today.close > ma5 * 1.03) {
-        // Fallback for short history: simple breakout
         isBreakout = true;
     }
 
     // --- 3. Institutional Analysis ---
     const recentInsts = insts.filter(i => i.name === 'Investment_Trust').slice(-3);
-    // Relaxed rule: Just need 3 days of data, not necessarily consecutively POSITIVE for all logic,
-    // but for "Consecutive Buy" tag we need pos.
-    const validInstData = recentInsts.length >= 1;
-    const consecutiveBuy = validInstData && recentInsts.every(i => (i.buy - i.sell) > 0);
+    const consecutiveBuy = recentInsts.length >= 1 && recentInsts.every(i => (i.buy - i.sell) > 0);
 
     // --- 4. Scoring ---
-    const maScoreVal = (isBreakout) ? 1.0 : 0; // Simplified
+    const maScoreVal = (isBreakout) ? 1.0 : 0;
     const instScoreVal = consecutiveBuy ? 1.0 : 0;
-
-    // Normalize vRatio (cap at 5x for scoring)
     const vScoreNorm = Math.min(vRatio, 5) / 5;
-
-    // Weights: Vol(40%), Tech(30%), Chips(30%)
     const totalScore = (vScoreNorm * 0.4) + (maScoreVal * 0.3) + (instScoreVal * 0.3);
 
     // --- 5. Kelly & Risk ---
-    // Risk Warning
     let riskWarning = '';
     if (ma5 && today.close < ma5) riskWarning = '股價跌破 5 日線，短線轉弱';
     else if (vRatio > 10) riskWarning = '成交量過熱 (>10倍)，防主力出貨';
@@ -135,6 +107,11 @@ export const evaluateStock = (stockId: string, history: StockHistory): AnalysisR
         tags.push('BREAKOUT');
     }
     if (consecutiveBuy) tags.push('INST_BUYING');
+
+    // --- 7. Analysis Hints ---
+    const techHint = isBreakout ? '股價站上均線集結點，形成技術面突破' : ((ma5 && today.close > ma5) ? '股價在 5 日線上強勢整理' : '股價暫時受到均線壓制');
+    const chipHint = consecutiveBuy ? '投信連續買盤介入，籌碼穩定向大戶集中' : '三大法人進出尚無明顯方向';
+    const fundHint = today.Trading_money > 100000000 ? '今日成交金額龐大，市場主流資金高度關注' : '成交熱度處於平均水平';
 
     return {
         stock_id: stockId,
@@ -157,6 +134,11 @@ export const evaluateStock = (stockId: string, history: StockHistory): AnalysisR
             maScore: parseFloat((maScoreVal * 30).toFixed(1)),
             chipScore: parseFloat((instScoreVal * 30).toFixed(1)),
             total: parseFloat((totalScore * 100).toFixed(1))
+        },
+        analysisHints: {
+            technical: techHint,
+            chips: chipHint,
+            fundamental: fundHint
         }
     };
 };

@@ -65,6 +65,12 @@ export interface AnalysisResult {
         chipScore: number; // Institutional
         total: number;
     };
+    is_recommended?: boolean;   // Activated after Stage 3 analysis
+    analysisHints?: {
+        technical: string;
+        chips: string;
+        fundamental: string;
+    };
 }
 
 export interface StockCandle {

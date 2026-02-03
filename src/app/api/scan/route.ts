@@ -4,24 +4,32 @@ import { ScannerService } from '@/services/scanner';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET() {
+export async function POST(req: Request) {
     try {
-        // No dates needed anymore for the initial scan (uses official daily snapshot)
-        const { results, timing } = await ScannerService.scanMarket();
+        const { stage, stockIds, stockId } = await req.json();
 
-        return NextResponse.json({
-            success: true,
-            count: results.length,
-            timing: timing,
-            data: results
-        });
+        // Stage 1: Fast Discovery (50 stocks)
+        if (stage === 'discovery') {
+            const results = await ScannerService.scanDiscovery();
+            return NextResponse.json({ success: true, data: results });
+        }
+
+        // Stage 2: Deep Filtering (Narrow to 30)
+        if (stage === 'filter' && Array.isArray(stockIds)) {
+            const results = await ScannerService.analyzeCandidates(stockIds);
+            return NextResponse.json({ success: true, data: results });
+        }
+
+        // Stage 3: Expert Verdict & Recommended (Single stock or specific list)
+        if (stage === 'expert' && stockId) {
+            const result = await ScannerService.getExpertAnalysis(stockId);
+            return NextResponse.json({ success: true, data: result });
+        }
+
+        return NextResponse.json({ success: false, error: 'Invalid stage' }, { status: 400 });
+
     } catch (error: any) {
-        console.error('Scan Error:', error);
-        return NextResponse.json({
-            success: false,
-            error: error.message,
-            timing: error.timing || {},
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        }, { status: 500 });
+        console.error('Scan API Error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
