@@ -7,25 +7,22 @@ import { format, subDays, isWeekend } from 'date-fns';
 export const ScannerService = {
     /**
      * Stage 1: Enhanced Market Scan
-     * 1. Get Today's Market Snapshot.
-     * 2. Select Top 100 by Volume.
-     * 3. Fetch past 10 days market snapshots to build mini-history.
-     * 4. Run AnalysisEngine to filter and score.
-     * 5. Return Top 30.
+     * Uses Parallel OpenAPI strategy to stay within Netlify 10s limit.
      */
     scanMarket: async (): Promise<AnalysisResult[]> => {
         console.log('Starting Parallel Optimized Market Scan...');
 
-        // 1. Fetch Latest Market Snapshot (No Date needed with OpenAPI)
+        // 1. Fetch Latest Market Snapshot (Instant with OpenAPI)
         let latestData: StockData[] = [];
         try {
             latestData = await ExchangeClient.getAllMarketQuotes();
         } catch (e: any) {
-            throw new Error(`Initial snapshot failed: ${e.message}`);
+            console.error(`Initial snapshot failed: ${e.message}`);
+            throw new Error(`Market data unavailable. Please try again later.`);
         }
 
         if (!latestData || latestData.length < 50) {
-            throw new Error(`Market snapshot too small (${latestData?.length}). Holiday?`);
+            throw new Error(`Market snapshot too small (${latestData?.length}). It might be a holiday.`);
         }
 
         // 2. Initial Filter: Top 100 by Volume
@@ -41,23 +38,22 @@ export const ScannerService = {
         candidates.forEach(c => historyMap.set(c.stock_id, [c]));
 
         // 3. Build Parallel History (Last 10 calendar days)
-        // We generate potential trading dates and fetch them in parallel (max 5 at once)
-        const dayZero = candidates[0].date; // Standard Western Date from Snapshot
+        const dayZero = candidates[0].date;
         const pastDates: string[] = [];
-        let cur = dayZero.replace(/-/g, '');
         let d = new Date(dayZero);
 
-        for (let i = 1; i <= 12; i++) { // Check up to 12 calendar days back
+        // Calculate valid trading days back (approx 7-8 days)
+        for (let i = 1; i <= 12; i++) {
             const target = subDays(d, i);
             if (!isWeekend(target)) {
                 pastDates.push(format(target, 'yyyyMMdd'));
             }
         }
 
-        console.log(`Fetching history dates in parallel: ${pastDates.join(', ')}`);
+        console.log(`Parallel Fetching history for: ${pastDates.join(', ')}`);
 
         // Limited Parallelism Helper
-        const fetchSubset = async (dateStr: string) => {
+        const fetchDaily = async (dateStr: string) => {
             try {
                 const daily = await ExchangeClient.getAllMarketQuotes(dateStr);
                 daily.forEach(stock => {
@@ -67,88 +63,29 @@ export const ScannerService = {
                     }
                 });
             } catch (e) {
-                console.warn(`Parallel fetch skip for ${dateStr}`);
+                console.warn(`Skip history for ${dateStr} due to error`);
             }
         };
 
-        // Fetch in 2 chunks to avoid overloading or banning
-        const chunks = [pastDates.slice(0, 5), pastDates.slice(5, 10)];
+        // Fetch in 2 chunks to stay within rate limits and time
+        const chunks = [pastDates.slice(0, 4), pastDates.slice(4, 8)];
         for (const chunk of chunks) {
-            await Promise.all(chunk.map(date => fetchSubset(date)));
-            await new Promise(r => setTimeout(r, 300)); // Small pause
-        }
-
-        // 3. Build History (Last 10 Days)
-        // We have Day 0. Need Day -1 to -9.
-        const historyMap = new Map<string, StockData[]>();
-
-        // Initialize with Day 0
-        candidates.forEach(c => {
-            historyMap.set(c.stock_id, [c]);
-        });
-
-        // Fetch past dates
-        // Note: This involves serialized requests or parallel. Parallel limit 3-5 to be nice.
-        const pastDates: string[] = [];
-        let d = effectiveDate; // Start from the valid data date
-        let daysFound = 0;
-        let lookback = 1;
-
-        while (daysFound < 7 && lookback < 15) { // Reduce to 7 trading days to save time, try 15 days back
-            const targetDate = subDays(d, lookback);
-            if (!isWeekend(targetDate)) {
-                pastDates.push(format(targetDate, 'yyyyMMdd'));
-                daysFound++;
-            }
-            lookback++;
-        }
-
-        console.log(`Fetching history for dates: ${pastDates.join(', ')}`);
-
-        // Helper to fetch and merge
-        const fetchAndMerge = async (dateStr: string) => {
-            try {
-                // We fetch ALL market for that day, but only keep what matches our candidates
-                const dailyMarket = await ExchangeClient.getAllMarketQuotes(dateStr);
-
-                dailyMarket.forEach(stock => {
-                    if (candidateIds.has(stock.stock_id)) {
-                        const list = historyMap.get(stock.stock_id);
-                        if (list) list.push(stock);
-                    }
-                });
-            } catch (e) {
-                console.warn(`Failed to fetch history for ${dateStr}`);
-            }
-        };
-
-        // Run in batches of 3 to avoid overwhelming
-        for (let i = 0; i < pastDates.length; i += 3) {
-            const batch = pastDates.slice(i, i + 3);
-            await Promise.all(batch.map(date => fetchAndMerge(date)));
+            await Promise.all(chunk.map(date => fetchDaily(date)));
+            // No delay between chunks if using OpenAPI as it handles load better
         }
 
         // 4. Scoring & Filtering
         let scoredCandidates: AnalysisResult[] = [];
-
         candidates.forEach(c => {
-            // Sort history ascending (oldest first)
             const hist = historyMap.get(c.stock_id) || [];
             hist.sort((a, b) => a.date.localeCompare(b.date));
 
-            // Run Engine
-            // Note: We don't have Institutional data here (only Day 0 snapshot doesn't usually have it, 
-            // or we'd need another API). For Stage 1, we might skip detailed chip analysis 
-            // or assume neutral if missing.
-            // *Wait*, ExchangeClient data doesn't include Inst data. 
-            // We pass empty insts or try to inference from 'spread'? No.
-            // We will proceed without Inst data for Stage 1. 
-            // The Engine gracefully handles missing chips (neutral score).
-
-            const result = evaluateStock(c.stock_id, { prices: hist, insts: [] });
-
-            if (result && result.score >= 0.3) { // Min score filter
-                scoredCandidates.push(result);
+            // Proceed if we have at least partial history (at least 3 days for indicators)
+            if (hist.length >= 3) {
+                const result = evaluateStock(c.stock_id, { prices: hist, insts: [] });
+                if (result && result.score >= 0.25) {
+                    scoredCandidates.push(result);
+                }
             }
         });
 
@@ -162,7 +99,6 @@ export const ScannerService = {
 
     /**
      * Stage 2: Deep Analysis (On-Demand)
-     * Performs full technical analysis for a single stock using FinMind (Detailed).
      */
     analyzeStock: async (stockId: string): Promise<AnalysisResult | null> => {
         console.log(`Analyzing stock ${stockId}...`);
@@ -174,7 +110,6 @@ export const ScannerService = {
         let insts: any[] = [];
 
         try {
-            // Try FinMind first
             try {
                 const [p, i] = await Promise.all([
                     FinMindClient.getDailyStats({ stockId, startDate, endDate }),
