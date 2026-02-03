@@ -1,13 +1,13 @@
 'use client';
 
 import { StockCard } from '@/components/dashboard/StockCard';
-import { AnalysisResult } from '@/types';
+import { AnalysisResult, StockData } from '@/types';
 import { Search, TrendingUp, Sparkles, Filter, Star, Loader2, Flame, Target } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
 
-type ScanStage = 'idle' | 'discovery' | 'filtering' | 'analyzing' | 'complete';
+type ScanStage = 'idle' | 'fetching' | 'filtering' | 'analyzing' | 'complete';
 
 export default function DashboardPage() {
   const [stage, setStage] = useState<ScanStage>('idle');
@@ -16,22 +16,89 @@ export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [timing, setTiming] = useState<any>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
 
   const runDiscovery = async () => {
-    setStage('discovery');
+    setStage('fetching');
     setError(null);
+    setProgress({ current: 0, total: 0, phase: '獲取市場快照...' });
+
     try {
-      const res = await fetch('/api/scan', {
+      // Phase 1: 獲取市場快照
+      const t0 = Date.now();
+      const snapshotRes = await fetch('/api/market/snapshot');
+      const snapshotJson = await snapshotRes.json();
+
+      if (!snapshotJson.success) {
+        throw new Error(snapshotJson.error);
+      }
+
+      const snapshot: StockData[] = snapshotJson.data;
+      const t1 = Date.now();
+
+      setProgress({
+        current: snapshot.length,
+        total: snapshot.length,
+        phase: `已獲取 ${snapshot.length} 支股票快照`
+      });
+
+      // Phase 2: 前端初步篩選
+      setStage('filtering');
+      setProgress({ current: 0, total: snapshot.length, phase: '前端篩選中...' });
+
+      const candidates = snapshot
+        .filter(s => s.Trading_Volume > 2000 && s.close > s.open)
+        .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
+        .slice(0, 100); // 取前 100 名候選
+
+      const t2 = Date.now();
+
+      setProgress({
+        current: candidates.length,
+        total: snapshot.length,
+        phase: `已篩選出 ${candidates.length} 支候選股票`
+      });
+
+      // Phase 3: 後端深度分析
+      setStage('analyzing');
+      setProgress({
+        current: 0,
+        total: candidates.length,
+        phase: '深度分析中（三大信號驗證）...'
+      });
+
+      const analyzeRes = await fetch('/api/scan/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: 'discovery' })
+        body: JSON.stringify({ stockIds: candidates.map(c => c.stock_id) })
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setDiscoveryData(json.data);
+
+      const analyzeJson = await analyzeRes.json();
+
+      if (!analyzeJson.success) {
+        throw new Error(analyzeJson.error);
+      }
+
+      const t3 = Date.now();
+
+      setDiscoveryData(analyzeJson.data);
       setFilteredData([]);
-      setTiming(json.timing);
-      setStage('idle');
+      setTiming({
+        snapshot: t1 - t0,
+        filter: t2 - t1,
+        analyze: t3 - t2,
+        total: t3 - t0,
+        candidatesCount: candidates.length
+      });
+      setProgress({
+        current: analyzeJson.count,
+        total: candidates.length,
+        phase: `完成！發現 ${analyzeJson.count} 支符合三大信號共振的股票`
+      });
+      setStage('complete');
+
+      setTimeout(() => setStage('idle'), 2000);
+
     } catch (e: any) {
       setError(e.message);
       setStage('idle');
@@ -83,7 +150,7 @@ export default function DashboardPage() {
         <h1 className="text-4xl font-black bg-gradient-to-r from-white via-white to-blue-400 bg-clip-text text-transparent mb-2">
           台股爆發預警系統
         </h1>
-        <p className="text-slate-400 text-sm">專業三段式掃描：量能激增 → 籌碼確認 → 個股分析</p>
+        <p className="text-slate-400 text-sm">專業三段式掃描：三大信號共振 → 籌碼確認 → 個股分析</p>
       </header>
 
       {/* Stage Controls */}
@@ -97,7 +164,7 @@ export default function DashboardPage() {
               discoveryData.length > 0 ? "bg-amber-600/20 border-amber-500 text-amber-400" : "bg-slate-900 border-slate-800 text-slate-500"
             )}
           >
-            {stage === 'discovery' ? <Loader2 className="w-6 h-6 mb-1 animate-spin" /> : <Flame className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />}
+            {isWorking ? <Loader2 className="w-6 h-6 mb-1 animate-spin" /> : <Flame className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />}
             <span className="text-xs font-bold uppercase">1. 三大信號共振</span>
             <span className="text-[9px] text-slate-600 mt-1">嚴格標準・寧缺毋濫</span>
           </button>
@@ -117,6 +184,26 @@ export default function DashboardPage() {
           </button>
         </div>
 
+        {/* Progress Indicator */}
+        {isWorking && (
+          <div className="p-4 bg-slate-900/50 rounded-2xl border border-slate-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-400">{progress.phase}</span>
+              {progress.total > 0 && (
+                <span className="text-xs font-mono text-slate-500">
+                  {progress.current} / {progress.total}
+                </span>
+              )}
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
+                style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '50%' }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Search */}
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
@@ -131,8 +218,9 @@ export default function DashboardPage() {
 
         {/* Timing Info */}
         {timing && (
-          <div className="text-center text-[10px] text-slate-600 font-mono">
-            掃描耗時：{timing.total}ms
+          <div className="text-center text-[10px] text-slate-600 font-mono space-y-1">
+            <div>快照: {timing.snapshot}ms | 前端篩選: {timing.filter}ms | 深度分析: {timing.analyze}ms</div>
+            <div className="text-slate-500">總耗時: {timing.total}ms | 候選數: {timing.candidatesCount}</div>
           </div>
         )}
       </div>
@@ -152,7 +240,9 @@ export default function DashboardPage() {
             <TrendingUp className="w-12 h-12 text-slate-800 mx-auto mb-4" />
             <p className="text-slate-500 font-bold">尚未啟動掃描</p>
             <p className="text-slate-600 text-xs mt-1 px-10 leading-relaxed">
-              點擊「1. 選出潛力股」開始掃描。系統將篩選出量能激增 (3.5x) + 均線糾結 (&lt;2%) + 突破確認 (&gt;3%) 的股票。
+              點擊「1. 三大信號共振」開始掃描。系統將以<span className="font-bold text-white">嚴格標準</span>篩選：
+              <br />量能激增 3.5x + 均線糾結 &lt;2% + 突破 3%
+              <br /><span className="text-amber-400">寧缺毋濫，可能只找到 0-10 支真正的爆發前兆股</span>
             </p>
           </div>
         ) : (
@@ -186,13 +276,15 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="pt-3 border-t border-white/5 text-xs text-slate-500">
-            <p><span className="font-bold">階段 1 (選出潛力股)</span>：量能激增 3.5x + 均線糾結 &lt;2% + 突破 3%，選出前 50 名</p>
+            <p><span className="font-bold">階段 1 (三大信號共振)</span>：量能激增 3.5x + 均線糾結 &lt;2% + 突破 3%，<span className="text-amber-400">嚴格標準・寧缺毋濫</span></p>
             <p className="mt-1"><span className="font-bold">階段 2 (深度篩選)</span>：投信連買 3 日 + 量能遞增 + 技術確認，篩選前 30 名</p>
             <p className="mt-1"><span className="font-bold">點擊個股</span>：查看完整 K 線圖、三大信號詳解、凱利建議與風險提示</p>
+            <p className="mt-2 text-[10px] text-slate-600">💡 本系統追求質量而非數量，可能只找到少數真正符合爆發前兆的股票</p>
+            <p className="mt-1 text-[10px] text-blue-400">⚡ 優化架構：前端快速篩選 + 後端深度分析，避免超時</p>
           </div>
         </div>
         <p className="mt-6 text-center text-xs text-slate-700 font-mono" suppressHydrationWarning>
-          台股爆發預警系統 v4.0 | {new Date().toLocaleString('zh-TW')}
+          台股爆發預警系統 v5.0 | {new Date().toLocaleString('zh-TW')}
         </p>
       </footer>
     </div>
