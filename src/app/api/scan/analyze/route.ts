@@ -13,7 +13,7 @@ export const revalidate = 0;
  */
 export async function POST(req: Request) {
     try {
-        const { stockIds } = await req.json();
+        const { stockIds, settings } = await req.json();
 
         if (!Array.isArray(stockIds) || stockIds.length === 0) {
             return NextResponse.json({
@@ -22,7 +22,13 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        console.log(`[Deep Analysis] Analyzing ${stockIds.length} candidates...`);
+        // 使用用戶自定義設定或預設值
+        const volumeRatio = settings?.volumeRatio || 3.5;
+        const maConstrict = settings?.maConstrict || 2.0;
+        const breakoutPercent = settings?.breakoutPercent || 3.0;
+
+        console.log(`[Deep Analysis] Analyzing ${stockIds.length} candidates with settings: V=${volumeRatio}x, MA=${maConstrict}%, Break=${breakoutPercent}%`);
+
 
         const t0 = Date.now();
         const results: AnalysisResult[] = [];
@@ -63,10 +69,11 @@ export async function POST(req: Request) {
                         // 檢查突破
                         const today = history[history.length - 1];
                         const changePercent = (today.close - today.open) / today.open;
-                        const isBreakout = today.close > Math.max(ma5, ma20) && changePercent > 0.03;
+                        const isBreakout = today.close > Math.max(ma5, ma20) && changePercent > (breakoutPercent / 100);
 
-                        // 三大信號共振（嚴格標準）
-                        if (vRatio >= 3.5 && maData.isSqueezing && isBreakout) {
+                        // 三大信號共振（使用自定義標準）
+                        const maThreshold = maConstrict / 100;  // 轉換為小數
+                        if (vRatio >= volumeRatio && maData.constrictValue < maThreshold && isBreakout) {
                             console.log(`[Deep Analysis] ✓ ${stockId} - V:${vRatio.toFixed(1)}x, MA:${(maData.constrictValue * 100).toFixed(1)}%, Break:${(changePercent * 100).toFixed(1)}%`);
 
                             const result: AnalysisResult = {
