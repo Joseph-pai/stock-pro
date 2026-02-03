@@ -399,7 +399,7 @@ export default function DashboardPage() {
             <p className="text-rose-400 font-black text-5xl mb-6 leading-tight">未發現符合標的</p>
             <div className="max-w-md mx-auto space-y-6">
               <p className="text-slate-500 text-2xl font-black leading-relaxed">
-                已深度分析 {timing?.totalStocks} 支股票，但在目前配置下未發現「完美共振」。
+                已深度分析 {timing?.candidatesCount} 支股票 (市場總量: {timing?.totalStocks} 支)，但在目前配置下未發現「完美共振」。
               </p>
               <div className="p-8 bg-blue-500/10 rounded-[2rem] border-2 border-blue-500/20 mt-8 text-left">
                 <div className="flex items-center gap-3 mb-4">
