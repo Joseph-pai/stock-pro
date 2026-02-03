@@ -108,7 +108,14 @@ export default function DashboardPage() {
           const isVolActive = s.Trading_Volume >= 1.0;
           return isTarget || (isRedK && isVolActive);
         })
-        .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
+        .sort((a, b) => {
+          // Prioritize the search target to ensure it is in the analysis batch
+          const aIsTarget = isSearchId && a.stock_id === targetTerm;
+          const bIsTarget = isSearchId && b.stock_id === targetTerm;
+          if (aIsTarget && !bIsTarget) return -1;
+          if (!aIsTarget && bIsTarget) return 1;
+          return b.Trading_Volume - a.Trading_Volume;
+        })
         .slice(0, 150);
 
       // Phase 3: Batched Resonance Analysis
