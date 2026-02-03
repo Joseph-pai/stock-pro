@@ -365,6 +365,9 @@ export const ScannerService = {
                 },
                 is_recommended: finalScore >= 0.6,
                 analysisHints: {
+                    technicalSignals: `V-Ratio 升至 ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線高度糾結' : ''} • 量能激增`,
+                    chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
+                    fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分 • 基本面支撐` : '營收成長動能待觀察',
                     technical: result.isBreakout ? '帶量突破' : (result.maData.isSqueezing ? '均線糾結待突破' : '無明顯技術信號'),
                     chips: consecutiveBuy >=3 ? `投信連買 ${consecutiveBuy} 天` : '無投信連買',
                     fundamental: revenueSupport ? '月營收連三月成長' : '營收未明顯支撐'

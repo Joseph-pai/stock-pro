@@ -68,9 +68,12 @@ export interface AnalysisResult {
     };
     is_recommended?: boolean;   // Activated after Stage 3 analysis
     analysisHints?: {
-        technical: string;
-        chips: string;
-        fundamental: string;
+        technicalSignals?: string;
+        chipSignals?: string;
+        fundamentalSignals?: string;
+        technical?: string;
+        chips?: string;
+        fundamental?: string;
     };
     // 專業分析數據
     maConstrictValue?: number;   // 均線糾結度 (0-1)

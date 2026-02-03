@@ -69,6 +69,64 @@ export default function DashboardPage() {
     return SECTORS[market].find(s => s.id === sector)?.name || '該類股';
   }, [market, sector]);
 
+  // Independent single-stock analysis for "三大信號" button
+  const runSingleStockAnalysis = async (stockId: string) => {
+    setStage('fetching');
+    setError(null);
+    setResults([]);
+    const t0 = Date.now();
+
+    try {
+      setProgress({ current: 0, total: 0, phase: `正在分析股票 ${stockId}...` });
+
+      // Fetch single stock analysis
+      const batchRes = await fetch('/api/scan/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stocks: [{ id: stockId, name: stockId }],
+          settings: settings
+        })
+      });
+
+      const batchJson = await batchRes.json();
+      if (!batchJson.success) throw new Error(batchJson.error || '分析失敗');
+
+      const singleResult = batchJson.data && batchJson.data[0];
+      if (!singleResult) {
+        throw new Error(`找不到股票 ${stockId} 的數據`);
+      }
+
+      // Map sector name
+      const stockId_trimmed = singleResult.stock_id.trim();
+      const mappedSector = industryMap[stockId_trimmed];
+      const resolvedSector = mappedSector || (market === 'TWSE' ? '上市板' : '上櫃板');
+
+      const augmentedResult = {
+        ...singleResult,
+        sector_name: resolvedSector
+      };
+
+      setResults([augmentedResult]);
+      const t_end = Date.now();
+      setTiming({
+        snapshot: 0,
+        analyze: t_end - t0,
+        total: t_end - t0,
+        candidatesCount: 1,
+        totalStocks: 1
+      });
+      setHasScanned(true);
+      setStage('complete');
+      setTimeout(() => setStage('idle'), 3000);
+
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message);
+      setStage('idle');
+    }
+  };
+
   const runScan = async (overrideTerm?: string) => {
     const activeTerm = overrideTerm || searchTerm;
     setStage('fetching');
@@ -372,7 +430,7 @@ export default function DashboardPage() {
           snapshot={snapshot}
           onSearch={(term) => {
             setSearchTerm(term);
-            runScan(term);
+            runSingleStockAnalysis(term);
           }}
           isWorking={isWorking}
         />

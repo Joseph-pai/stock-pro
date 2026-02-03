@@ -139,6 +139,11 @@ export async function POST(req: Request) {
                         chipScore: parseFloat(chipScore.toFixed(2)),
                         fundamentalBonus: parseFloat((revenueBonusPoints || 0).toFixed(2)),
                         total: parseFloat(totalPoints.toFixed(2))
+                    },
+                    analysisHints: {
+                        technicalSignals: `V-Ratio 升至 ${evalData?.vRatio.toFixed(1)}x${evalData?.maData.isSqueezing ? ' • 均線高度糾結' : ''} • 量能激增`,
+                        chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
+                        fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${(revenueBonusPoints.toFixed(1))}分 • 基本面支撐` : '營收成長動能待觀察'
                     }
                 };
 

@@ -17,9 +17,17 @@ export const StockSearch: React.FC<StockSearchProps> = ({ snapshot, onSearch, is
     const suggestions = React.useMemo(() => {
         if (!searchTerm.trim() || searchTerm.length < 1) return [];
         const term = searchTerm.toLowerCase();
-        return snapshot
-            .filter(s => s.stock_id.includes(term) || s.stock_name.toLowerCase().includes(term))
-            .slice(0, 10);
+        // Always show suggestions if data exists, or fallback to try-parse stock ID
+        if (snapshot && snapshot.length > 0) {
+            return snapshot
+                .filter(s => s.stock_id.includes(term) || s.stock_name.toLowerCase().includes(term))
+                .slice(0, 10);
+        }
+        // Fallback: allow direct stock ID entry even without snapshot
+        if (/^\d{4}$/.test(term)) {
+            return [{ stock_id: term, stock_name: '(輸入代碼)', date: '', close: 0, open: 0, max: 0, min: 0, Trading_Volume: 0, Trading_money: 0, spread: 0, Trading_turnover: 0 }];
+        }
+        return [];
     }, [searchTerm, snapshot]);
 
     useEffect(() => {

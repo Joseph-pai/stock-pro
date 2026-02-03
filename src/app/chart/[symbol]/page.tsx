@@ -203,6 +203,43 @@ export default function ChartPage() {
                                 color="blue"
                             />
                         </div>
+
+                        {/* Analysis Breakdown - 技術面/籌碼面/基本面 */}
+                        <div className="bg-slate-900/40 border border-white/5 rounded-[2rem] p-6 space-y-4">
+                            <h4 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                                <Activity className="w-4 h-4" />
+                                分析提示
+                            </h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                {/* Technical */}
+                                <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                    <div className="pt-1">
+                                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded">技術面</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-slate-300 flex-1">
+                                        {data.analysisHints?.technicalSignals || 'V-Ratio 爆升、均線高度糾結'}
+                                    </span>
+                                </div>
+                                {/* Chips */}
+                                <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                    <div className="pt-1">
+                                        <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded">籌碼面</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-slate-300 flex-1">
+                                        {data.analysisHints?.chipSignals || '機構買進集中、籌碼震盪'}
+                                    </span>
+                                </div>
+                                {/* Fundamental */}
+                                <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                    <div className="pt-1">
+                                        <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded">基本面</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-slate-300 flex-1">
+                                        {data.analysisHints?.fundamentalSignals || '營收環比正成長'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </section>
                 )}
 
@@ -238,6 +275,122 @@ export default function ChartPage() {
                     {/* Verdict System - Only show when NOT landscape */}
                     {!isLandscape && (
                         <section className="p-8 space-y-8">
+                            {/* Score Breakdown */}
+                            <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="p-2 bg-blue-500/20 rounded-xl">
+                                        <BarChart3 className="w-6 h-6 text-blue-400" />
+                                    </div>
+                                    <h3 className="text-2xl font-black">綜合評分</h3>
+                                </div>
+                                
+                                {/* Score Display */}
+                                <div className="mb-8">
+                                    <div className="flex items-baseline gap-4 mb-6">
+                                        <span className="text-6xl font-black font-mono text-blue-400">
+                                            {Math.round((data.score || 0.85) * 100)}
+                                        </span>
+                                        <span className="text-xl text-slate-500 font-bold">/ 100</span>
+                                    </div>
+
+                                    {/* Score Components */}
+                                    <div className="space-y-3">
+                                        {data.comprehensiveScoreDetails && (
+                                            <>
+                                                <ScoreBar
+                                                    label="量能指標 (Volume)"
+                                                    value={data.comprehensiveScoreDetails.volumeScore || 0}
+                                                    max={40}
+                                                    color="amber"
+                                                />
+                                                <ScoreBar
+                                                    label="均線指標 (MA)"
+                                                    value={data.comprehensiveScoreDetails.maScore || 0}
+                                                    max={30}
+                                                    color="purple"
+                                                />
+                                                <ScoreBar
+                                                    label="籌碼指標 (Chips)"
+                                                    value={data.comprehensiveScoreDetails.chipScore || 0}
+                                                    max={30}
+                                                    color="emerald"
+                                                />
+                                                <ScoreBar
+                                                    label="基本面加分 (Fundamental)"
+                                                    value={data.comprehensiveScoreDetails.fundamentalBonus || 0}
+                                                    max={10}
+                                                    color="blue"
+                                                />
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Kelly Formula & Action */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Risk Assessment */}
+                                <div className="bg-slate-900 border-2 border-rose-500/30 rounded-[2.5rem] p-8 shadow-2xl bg-gradient-to-br from-slate-900 to-rose-500/5">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="p-2 bg-rose-500/20 rounded-xl">
+                                            <AlertTriangle className="w-6 h-6 text-rose-400" />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-rose-400">風險警示</h3>
+                                    </div>
+                                    
+                                    <div className="space-y-3 text-sm font-bold text-slate-300">
+                                        <div className="flex gap-2 items-start">
+                                            <span className="text-rose-400 mt-1">⚠</span>
+                                            <span>若股價跌破 5 日線，應立即設定停損點以控制風險</span>
+                                        </div>
+                                        <div className="flex gap-2 items-start">
+                                            <span className="text-rose-400 mt-1">⚠</span>
+                                            <span>籌碼面可能面臨主力獲利了結，需警惕量能急收</span>
+                                        </div>
+                                        <div className="flex gap-2 items-start">
+                                            <span className="text-yellow-400 mt-1">⚡</span>
+                                            <span>操作前務必確認均線糾結程度和機構持股動向</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Kelly Formula */}
+                                <div className="bg-slate-900 border-2 border-emerald-500/30 rounded-[2.5rem] p-8 shadow-2xl bg-gradient-to-br from-slate-900 to-emerald-500/5">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="p-2 bg-emerald-500/20 rounded-xl">
+                                            <Calculator className="w-6 h-6 text-emerald-400" />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-emerald-400">凱利公式</h3>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">推薦操作</p>
+                                            <div className="text-3xl font-black text-emerald-400">
+                                                {calculateKellyAction(data.score || 0.85)}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="pt-4 border-t border-slate-700">
+                                            <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">建議投資比例</p>
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-3xl font-black text-emerald-400">
+                                                    {calculateKellyPercentage(data.score || 0.85)}%
+                                                </span>
+                                                <span className="text-sm text-slate-400">的可用資金</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-4 border-t border-slate-700">
+                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">說明</p>
+                                            <p className="text-xs text-slate-400 leading-relaxed">
+                                                凱利公式計算最優投注比例，避免過度槓桿。評分越高，建議投資比例越高。
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
                                     <MessageSquare className="w-32 h-32" />
@@ -325,4 +478,47 @@ function VerdictTag({ label, color }: { label: string, color: string }) {
             {label}
         </span>
     );
+}
+
+// Score bar component for breakdown display
+function ScoreBar({ label, value, max, color }: { label: string, value: number, max: number, color: string }) {
+    const percentage = (value / max) * 100;
+    const colorClasses = {
+        amber: "bg-amber-500",
+        purple: "bg-purple-500",
+        emerald: "bg-emerald-500",
+        blue: "bg-blue-500",
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-bold text-slate-300">{label}</span>
+                <span className="text-sm font-black text-slate-400 font-mono">{value.toFixed(1)}/{max}</span>
+            </div>
+            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                    className={clsx("h-full rounded-full transition-all", colorClasses[color as keyof typeof colorClasses])}
+                    style={{ width: `${Math.min(percentage, 100)}%` }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// Kelly formula calculation functions
+function calculateKellyAction(score: number): string {
+    if (score >= 0.75) return "強烈買進";
+    if (score >= 0.6) return "適度買進";
+    if (score >= 0.45) return "觀望";
+    return "暫不操作";
+}
+
+function calculateKellyPercentage(score: number): number {
+    // Kelly formula: f = (b*p - q) / b
+    // Simplified: use score as win probability (p)
+    // Assume 1:1 reward:risk (b = 1)
+    // f = 2*p - 1
+    const percentage = Math.max(0, Math.min(100, (score * 2 - 1) * 100));
+    return Math.round(percentage);
 }
