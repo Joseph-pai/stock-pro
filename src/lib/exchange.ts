@@ -60,48 +60,76 @@ export const ExchangeClient = {
                 return [];
             }
 
-            // MI_INDEX response structure is complex. 'data9' usually contains the stock quotes.
-            // But sometimes it's data5, data8 etc depending on the index inclusions. 
-            // We look for the array that has fields starting with ["證券代號", "證券名稱"...]
-            const typeKey = Object.keys(res.data).find(k =>
-                Array.isArray(res.data[k]) &&
-                res.data.fields9 &&
-                k === 'data9' // data9 is usually "ALLBUT0999" stocks
-            );
+            // MI_INDEX response structure is complex. Stock data is in a table where fields contain "證券代號"
+            // We iterate through all keys in the response to find the correct data/fields pair
+            let quotesIn: string[][] = [];
+            let fieldsIn: string[] = [];
 
-            const quotesIn = res.data[typeKey || 'data9'] || []; // Fallback
+            const keys = Object.keys(res.data);
+            for (const key of keys) {
+                if (key.startsWith('data') && Array.isArray(res.data[key])) {
+                    const suffix = key.slice(4);
+                    const fieldsKey = 'fields' + suffix;
+                    const fields = res.data[fieldsKey];
+                    if (Array.isArray(fields) && fields.includes('證券代號')) {
+                        quotesIn = res.data[key];
+                        fieldsIn = fields;
+                        break;
+                    }
+                }
+            }
 
-            // Re-parse date from response if possible, or use requested
+            if (quotesIn.length === 0) {
+                console.warn(`TWSE: No stock table found in response for ${qDate}`);
+                return [];
+            }
+
             const finalDate = ExchangeClient.convertRocDateToWestern(res.data.date) ||
                 `${qDate.slice(0, 4)}-${qDate.slice(4, 6)}-${qDate.slice(6, 8)}`;
-
-            // TWSE MI_INDEX Structure (usually):
-            // 0: 代號, 1: 名稱, 2: 成交股數, 3: 成交筆數, 4: 成交金額, 5: 開盤, 6: 最高, 7: 最低, 8: 收盤...
-            // Note: Index might differ from STOCK_DAY_ALL!
-            // Let's rely on standard MI_INDEX indices for "ALLBUT0999"
 
             const parseNum = (val: string) => {
                 const clean = val.replace(/,/g, '');
                 return clean === '--' || clean === '---' ? 0 : parseFloat(clean);
             };
 
-            return quotesIn.map((row: string[]) => ({
-                stock_id: row[0],
-                stock_name: row[1],
-                date: finalDate,
-                Trading_Volume: parseNum(row[2]), // shares
-                Trading_turnover: parseNum(row[3]), // transaction count
-                Trading_money: parseNum(row[4]),
-                open: parseNum(row[5]),
-                max: parseNum(row[6]),
-                min: parseNum(row[7]),
-                close: parseNum(row[8]),
-                spread: row[9].includes('-') ? -parseNum(row[10]) : parseNum(row[10]), // +/- sign is separate in row[9] usually
-            })).filter((s: StockData) => s.close > 0);
+            // Map fields to indices
+            const idxId = fieldsIn.indexOf('證券代號');
+            const idxName = fieldsIn.indexOf('證券名稱');
+            const idxVol = fieldsIn.indexOf('成交股數');
+            const idxTo = fieldsIn.indexOf('成交筆數');
+            const idxMoney = fieldsIn.indexOf('成交金額');
+            const idxOpen = fieldsIn.indexOf('開盤價');
+            const idxMax = fieldsIn.indexOf('最高價');
+            const idxMin = fieldsIn.indexOf('最低價');
+            const idxClose = fieldsIn.indexOf('收盤價');
+            const idxSign = fieldsIn.indexOf('漲跌(+/-)');
+            const idxDiff = fieldsIn.indexOf('漲跌價差');
 
-        } catch (error) {
-            console.error('Failed to fetch TWSE data:', error);
-            return [];
+            return quotesIn.map((row: string[]) => {
+                const close = parseNum(row[idxClose]);
+                if (close === 0) return null;
+
+                let diff = parseNum(row[idxDiff]);
+                if (row[idxSign] && row[idxSign].includes('-')) diff = -diff;
+
+                return {
+                    stock_id: row[idxId],
+                    stock_name: row[idxName],
+                    date: finalDate,
+                    Trading_Volume: parseNum(row[idxVol]),
+                    Trading_turnover: parseNum(row[idxTo]),
+                    Trading_money: parseNum(row[idxMoney]),
+                    open: parseNum(row[idxOpen]),
+                    max: parseNum(row[idxMax]),
+                    min: parseNum(row[idxMin]),
+                    close: close,
+                    spread: diff,
+                };
+            }).filter(Boolean) as StockData[];
+
+        } catch (error: any) {
+            console.error('Failed to fetch TWSE data:', error.message);
+            throw error; // Bubble up
         }
     },
 
@@ -157,9 +185,9 @@ export const ExchangeClient = {
                 Trading_turnover: parseNum(row[9]),
             })).filter(s => s.close > 0 && s.stock_id.length === 4);
 
-        } catch (error) {
-            console.error('Failed to fetch TPEX data:', error);
-            return [];
+        } catch (error: any) {
+            console.error('Failed to fetch TPEX data:', error.message);
+            throw error; // Bubble up
         }
     },
 

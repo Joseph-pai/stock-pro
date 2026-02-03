@@ -47,6 +47,8 @@ export const ScannerService = {
             if (!found) {
                 effectiveDate = subDays(effectiveDate, 1);
                 attempts++;
+                // Add 500ms delay to be nice to APIs
+                await new Promise(r => setTimeout(r, 500));
             }
         }
 
