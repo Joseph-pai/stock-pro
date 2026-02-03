@@ -188,7 +188,8 @@ export const ExchangeClient = {
 
             // 3. Robust Fallback / Hard-fixes for common stocks that often fail reporting
             const HARD_FIXES: Record<string, string> = {
-                '6426': '通信網路',
+                '2887': '貿易百貨',        // 台新新光金
+                '6426': '通信網路',        // 統新
                 '6451': '半導體業',
                 '2330': '半導體業',
                 '2317': '其他電子'

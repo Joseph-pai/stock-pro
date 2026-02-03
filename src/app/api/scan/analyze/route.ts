@@ -45,6 +45,9 @@ export async function POST(req: Request) {
 
         const results: AnalysisResult[] = [];
 
+        // Load industry mapping once for this batch
+        const industryMapping = await ExchangeClient.getIndustryMapping();
+
         // Process this batch
         const batchResults = await Promise.allSettled(
             stocks.map(async (stock: { id: string, name: string }) => {
@@ -157,6 +160,7 @@ export async function POST(req: Request) {
                 const result: AnalysisResult = {
                     stock_id: stock.id,
                     stock_name: stock.name || stock.id,
+                    sector_name: industryMapping[stock.id.trim()] || '其他',
                     close: today.close,
                     change_percent: history.length > 1 ? (today.close - history[history.length - 2].close) / history[history.length - 2].close : 0,
                     score: finalScore,

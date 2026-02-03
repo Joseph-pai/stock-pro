@@ -54,6 +54,9 @@ export const ScannerService = {
         const t0 = Date.now();
         console.log('[Scanner] Stage 1: Discovery - 兩階段篩選（快速預篩 + 嚴格驗證）...');
 
+        // Load industry mapping
+        const industryMapping = await ExchangeClient.getIndustryMapping();
+
         // Phase 1: 快速預篩（使用快照數據）
         const snapshot = await ExchangeClient.getAllMarketQuotes('TWSE'); // Add default market to fix build
         const t1 = Date.now();
@@ -121,6 +124,7 @@ export const ScannerService = {
                             const result: AnalysisResult = {
                                 stock_id: stock.stock_id,
                                 stock_name: stock.stock_name,
+                                sector_name: industryMapping[stock.stock_id.trim()] || '其他',
                                 close: today.close,
                                 change_percent: (today.close - history[history.length - 2].close) / history[history.length - 2].close,
                                 score: 0,
@@ -232,6 +236,9 @@ export const ScannerService = {
     analyzeStock: async (stockId: string): Promise<AnalysisResult | null> => {
         try {
             console.log(`[Analyze] Fetching data for ${stockId}...`);
+
+            // Load industry mapping
+            const industryMapping = await ExchangeClient.getIndustryMapping();
 
             let prices: StockData[] = [];
             let insts: any[] = [];
@@ -385,6 +392,7 @@ export const ScannerService = {
             return {
                 stock_id: stockId,
                 stock_name: today.stock_name || stockId,
+                sector_name: industryMapping[stockId.trim()] || '其他',
                 close: today.close,
                 change_percent: result.changePercent,
                 score: finalScore,
