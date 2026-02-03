@@ -3,6 +3,7 @@
 import { StockCard } from '@/components/dashboard/StockCard';
 import { AnalysisResult, StockData } from '@/types';
 import { SECTORS, MarketType, MARKET_NAMES } from '@/lib/sectors';
+import { StockSearch } from '@/components/dashboard/StockSearch';
 import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/navigation';
@@ -38,6 +39,7 @@ export default function DashboardPage() {
   const [market, setMarket] = useState<MarketType>('TWSE');
   const [sector, setSector] = useState<string>('ALL');
   const [industryMap, setIndustryMap] = useState<Record<string, string>>({});
+  const [snapshot, setSnapshot] = useState<StockData[]>([]);
 
   // Load industry mapping on mount
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function DashboardPage() {
       if (!snapshotJson.success) throw new Error(snapshotJson.error);
 
       const snapshot: StockData[] = snapshotJson.data;
+      setSnapshot(snapshot);
       const t1 = Date.now();
 
       // Phase 2: Candidate Filtering
@@ -346,16 +349,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="relative group shadow-2xl">
-          <Search className="absolute left-8 top-1/2 -translate-y-1/2 w-8 h-8 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
-          <input
-            type="text"
-            placeholder="輸入股票代碼或名稱快速查找..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900 border-4 border-slate-800 rounded-[2.5rem] py-8 pl-20 pr-10 text-3xl font-black focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 text-white"
-          />
-        </div>
+        <StockSearch
+          snapshot={snapshot}
+          onSearch={(term) => {
+            setSearchTerm(term);
+            runScan();
+          }}
+          isWorking={isWorking}
+        />
       </div>
 
       {/* Results Container */}
