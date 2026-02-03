@@ -6,6 +6,34 @@ import { AnalysisResult, StockData } from '@/types';
 import { format, subDays } from 'date-fns';
 import { calculateSMA } from './indicators';
 
+/**
+ * Normalize date format: handles both ROC (民國 RRRY/MM/DD) and ISO (YYYY-MM-DD) formats
+ * @param dateStr - Date string in ROC or ISO format
+ * @returns ISO formatted date string (YYYY-MM-DD)
+ */
+function normalizeDate(dateStr: string): string {
+    if (!dateStr) return dateStr;
+    
+    // Try ISO format first (YYYY-MM-DD)
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
+    }
+    
+    // Try ROC format (RRRY/MM/DD or RRR/MM/DD)
+    const rocMatch = dateStr.match(/^(\d{2,3})\/(\d{2})\/(\d{2})$/);
+    if (rocMatch) {
+        const rocYear = parseInt(rocMatch[1]);
+        const month = rocMatch[2];
+        const day = rocMatch[3];
+        const gregorianYear = rocYear + 1911;
+        return `${gregorianYear}-${month}-${day}`;
+    }
+    
+    // Return as-is if format unrecognized
+    console.warn(`[normalizeDate] Unrecognized date format: ${dateStr}`);
+    return dateStr;
+}
+
 export const ScannerService = {
     /**
      * Stage 1: Discovery (兩階段篩選 - 避免超時)
@@ -279,8 +307,15 @@ export const ScannerService = {
                 if (Array.isArray(rev) && rev.length >= 2) {
                     // Helper to extract revenue value from various possible fields
                     const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-                    // sort by date ascending
-                    const sorted = [...rev].sort((a: any, b: any) => a.date.localeCompare(b.date));
+                    
+                    // FIXED: Normalize dates before sorting
+                    const normalized = rev.map((r: any) => ({
+                        ...r,
+                        date: normalizeDate(r.date)
+                    }));
+                    
+                    // sort by normalized date ascending
+                    const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                     const latest = sorted[sorted.length - 1];
                     const latestRev = Number(getRevenue(latest)) || 0;
 
@@ -302,7 +337,7 @@ export const ScannerService = {
                     // YoY: try to find same month previous year
                     let yoyScore = 0;
                     if (sorted.length >= 13) {
-                        // latest date string assumed YYYY-MM-DD; build year-1 same month
+                        // latest date is now normalized (YYYY-MM-DD)
                         const dt = new Date(latest.date);
                         const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
                         const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth()+1).padStart(2,'0')}`;
@@ -328,7 +363,16 @@ export const ScannerService = {
             const volumeScore = engineDetails.volumeScore || 0;
             const maScore = engineDetails.maScore || 0;
             const chipScore = instScore; // override
-            const totalPoints = volumeScore + maScore + chipScore + revenueBonusPoints;
+            
+            // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
+            // Original: 40-30-30 = 100, then +10 revenue = 110 (incorrect)
+            // New: 35-25-25-15 = 100 (maintains proportions while ensuring max 100)
+            const normalizedVolumeScore = volumeScore * (35 / 40); // scale from 40 to 35
+            const normalizedMaScore = maScore * (25 / 30);         // scale from 30 to 25
+            const normalizedChipScore = Math.min(chipScore * (25 / 30), 25); // scale from 30 to 25
+            const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 10), 15); // scale from 10 to 15
+            
+            const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
             const tags: AnalysisResult['tags'] = ['DISCOVERY'];
@@ -357,10 +401,10 @@ export const ScannerService = {
                 dailyVolumeTrend: prices.map(p => p.Trading_Volume).slice(-10),
                 volumeIncreasing: checkVolumeIncreasing(prices.map(p => p.Trading_Volume)),
                 comprehensiveScoreDetails: {
-                    volumeScore: parseFloat(volumeScore.toFixed(2)),
-                    maScore: parseFloat(maScore.toFixed(2)),
-                    chipScore: parseFloat(chipScore.toFixed(2)),
-                    fundamentalBonus: parseFloat(revenueBonusPoints.toFixed(2)),
+                    volumeScore: parseFloat(normalizedVolumeScore.toFixed(2)),
+                    maScore: parseFloat(normalizedMaScore.toFixed(2)),
+                    chipScore: parseFloat(normalizedChipScore.toFixed(2)),
+                    fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
                     total: parseFloat(totalPoints.toFixed(2))
                 },
                 is_recommended: finalScore >= 0.6,

@@ -9,6 +9,30 @@ import { format, subDays } from 'date-fns';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+/**
+ * Normalize date format: handles both ROC (民國 RRRY/MM/DD) and ISO (YYYY-MM-DD) formats
+ */
+function normalizeDate(dateStr: string): string {
+    if (!dateStr) return dateStr;
+    
+    // Try ISO format first (YYYY-MM-DD)
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
+    }
+    
+    // Try ROC format (RRRY/MM/DD or RRR/MM/DD)
+    const rocMatch = dateStr.match(/^(\d{2,3})\/(\d{2})\/(\d{2})$/);
+    if (rocMatch) {
+        const rocYear = parseInt(rocMatch[1]);
+        const month = rocMatch[2];
+        const day = rocMatch[3];
+        const gregorianYear = rocYear + 1911;
+        return `${gregorianYear}-${month}-${day}`;
+    }
+    
+    return dateStr;
+}
+
 export async function POST(req: Request) {
     try {
         const { stocks, settings } = await req.json(); // stocks: { id, name }[]
@@ -60,7 +84,14 @@ export async function POST(req: Request) {
                         const rev = await FinMindExtras.getMonthlyRevenue({ stockId: stock.id, startDate: revStart, endDate: endDate });
                         if (Array.isArray(rev) && rev.length >= 2) {
                             const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-                            const sorted = [...rev].sort((a: any, b: any) => a.date.localeCompare(b.date));
+                            
+                            // FIXED: Normalize dates before sorting
+                            const normalized = rev.map((r: any) => ({
+                                ...r,
+                                date: normalizeDate(r.date)
+                            }));
+                            
+                            const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                             const latest = sorted[sorted.length - 1];
                             const latestRev = Number(getRevenue(latest)) || 0;
 
@@ -106,7 +137,15 @@ export async function POST(req: Request) {
                 const volumeScore = engineDetails.volumeScore || 0;
                 const maScore = engineDetails.maScore || 0;
                 const chipScore = instScore;
-                const totalPoints = volumeScore + maScore + chipScore + (typeof revenueBonusPoints === 'number' ? revenueBonusPoints : 0);
+                const revenueBonusPointsTyped = typeof revenueBonusPoints === 'number' ? revenueBonusPoints : 0;
+                
+                // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
+                const normalizedVolumeScore = volumeScore * (35 / 40);
+                const normalizedMaScore = maScore * (25 / 30);
+                const normalizedChipScore = Math.min(chipScore * (25 / 30), 25);
+                const normalizedFundamentalBonus = Math.min(revenueBonusPointsTyped * (15 / 10), 15);
+                
+                const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
                 const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
                 const tags: typeof result['tags'] = ['DISCOVERY'];
@@ -134,10 +173,10 @@ export async function POST(req: Request) {
                     volumeIncreasing: checkVolumeIncreasing(volumes),
                     is_recommended: finalScore >= 0.6,
                     comprehensiveScoreDetails: {
-                        volumeScore: parseFloat(volumeScore.toFixed(2)),
-                        maScore: parseFloat(maScore.toFixed(2)),
-                        chipScore: parseFloat(chipScore.toFixed(2)),
-                        fundamentalBonus: parseFloat((revenueBonusPoints || 0).toFixed(2)),
+                        volumeScore: parseFloat(normalizedVolumeScore.toFixed(2)),
+                        maScore: parseFloat(normalizedMaScore.toFixed(2)),
+                        chipScore: parseFloat(normalizedChipScore.toFixed(2)),
+                        fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
                         total: parseFloat(totalPoints.toFixed(2))
                     },
                     analysisHints: {
