@@ -17,6 +17,7 @@ export default function ChartPage() {
     const { symbol } = useParams();
     const router = useRouter();
     const [isLandscape, setIsLandscape] = useState(false);
+    const [showChart, setShowChart] = useState(true);  // Toggle K-line visibility
 
     useEffect(() => {
         const checkOrientation = () => {
@@ -248,36 +249,90 @@ export default function ChartPage() {
                     "flex-1 flex flex-col",
                     isLandscape ? "w-full h-full" : ""
                 )}>
-                    {/* The Chart - Responsive Container */}
-                    <div className={clsx(
-                        "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
-                        isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5"
-                    )}>
-                        <TradingViewChart
-                            data={candles}
-                            ma5={ma5}
-                            ma10={ma10}
-                            ma20={ma20}
-                            poc={data.poc}
-                        />
+                    {/* Chart Section with Toggle */}
+                    {!isLandscape && (
+                        <div className="px-6 pt-6 pb-3 flex items-center justify-between">
+                            <h3 className="text-lg font-black text-slate-300 flex items-center gap-2">
+                                <LineChart className="w-5 h-5 text-blue-400" />
+                                技術走勢圖
+                            </h3>
+                            <button
+                                onClick={() => setShowChart(!showChart)}
+                                className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-sm font-black text-slate-400 hover:text-blue-400 hover:border-blue-500/30 transition-all"
+                            >
+                                {showChart ? '隱藏' : '顯示'} K線
+                            </button>
+                        </div>
+                    )}
 
-                        {/* Legend Overlay */}
-                        <div className="absolute top-4 left-6 pointer-events-none space-y-2">
-                            <div className="flex items-center gap-4 bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                                <LegendItem color="bg-amber-500" label="MA5" />
-                                <LegendItem color="bg-amber-500" label="MA5 (5日均線)" />
-                                <LegendItem color="bg-blue-500" label="MA10 (10日均線)" />
-                                <LegendItem color="bg-purple-500" label="MA20 (20日均線)" />
-                                <LegendItem color="bg-yellow-400" label="POC (支撐價)" border="border-dashed" />
+                    {/* The Chart - Responsive Container with Show/Hide */}
+                    {(isLandscape || showChart) && (
+                        <div className={clsx(
+                            "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
+                            isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6"
+                        )}>
+                            <TradingViewChart
+                                data={candles}
+                                ma5={ma5}
+                                ma10={ma10}
+                                ma20={ma20}
+                                poc={data.poc}
+                            />
+
+                            {/* Legend Overlay */}
+                            <div className="absolute top-4 left-6 pointer-events-none space-y-2">
+                                <div className="flex items-center gap-4 bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+                                    <LegendItem color="bg-amber-500" label="MA5 (5日均線)" />
+                                    <LegendItem color="bg-blue-500" label="MA10 (10日均線)" />
+                                    <LegendItem color="bg-purple-500" label="MA20 (20日均線)" />
+                                    <LegendItem color="bg-yellow-400" label="POC (支撐價)" border="border-dashed" />
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Verdict System - Only show when NOT landscape */}
                     {!isLandscape && (
-                        <section className="p-8 space-y-8">
+                        <section className={clsx("space-y-8", showChart ? "p-8" : "px-6 py-8")}>
+                            {/* Analysis Hints Section - Show right after chart toggle */}
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-black text-slate-300 flex items-center gap-2 px-6 md:px-0">
+                                    <Activity className="w-5 h-5 text-amber-400" />
+                                    分析提示
+                                </h3>
+                                <div className="px-6 md:px-0 grid grid-cols-1 gap-3">
+                                    {/* Technical */}
+                                    <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                        <div className="pt-1">
+                                            <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded">技術面</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-300 flex-1">
+                                            {data.analysisHints?.technicalSignals || 'V-Ratio 爆升、均線高度糾結'}
+                                        </span>
+                                    </div>
+                                    {/* Chips */}
+                                    <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                        <div className="pt-1">
+                                            <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded">籌碼面</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-300 flex-1">
+                                            {data.analysisHints?.chipSignals || '機構買進集中、籌碼震盪'}
+                                        </span>
+                                    </div>
+                                    {/* Fundamental */}
+                                    <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                                        <div className="pt-1">
+                                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded">基本面</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-300 flex-1">
+                                            {data.analysisHints?.fundamentalSignals || '營收環比正成長'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Score Breakdown */}
-                            <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl">
+                            <div className="px-6 md:px-0 bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl">
                                 <div className="flex items-center gap-3 mb-6">
                                     <div className="p-2 bg-blue-500/20 rounded-xl">
                                         <BarChart3 className="w-6 h-6 text-blue-400" />
@@ -327,9 +382,8 @@ export default function ChartPage() {
                                     </div>
                                 </div>
                             </div>
-
                             {/* Kelly Formula & Action */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="px-6 md:px-0 grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Risk Assessment */}
                                 <div className="bg-slate-900 border-2 border-rose-500/30 rounded-[2.5rem] p-8 shadow-2xl bg-gradient-to-br from-slate-900 to-rose-500/5">
                                     <div className="flex items-center gap-3 mb-6">
@@ -392,7 +446,7 @@ export default function ChartPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+                            <div className="px-6 md:px-0 bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
                                     <MessageSquare className="w-32 h-32" />
                                 </div>
