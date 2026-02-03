@@ -7,11 +7,12 @@ export const revalidate = 0;
 export async function GET() {
     try {
         // No dates needed anymore for the initial scan (uses official daily snapshot)
-        const results = await ScannerService.scanMarket();
+        const { results, timing } = await ScannerService.scanMarket();
 
         return NextResponse.json({
             success: true,
             count: results.length,
+            timing: timing,
             data: results
         });
     } catch (error: any) {
@@ -19,6 +20,7 @@ export async function GET() {
         return NextResponse.json({
             success: false,
             error: error.message,
+            timing: error.timing || {},
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         }, { status: 500 });
     }
