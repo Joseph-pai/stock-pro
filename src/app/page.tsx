@@ -97,10 +97,22 @@ export default function DashboardPage() {
         throw new Error(`找不到股票 ${stockId} 的數據`);
       }
 
-      // Map sector name
-      const stockId_trimmed = singleResult.stock_id.trim();
-      const mappedSector = industryMap[stockId_trimmed];
-      const resolvedSector = mappedSector || (market === 'TWSE' ? '上市板' : '上櫃板');
+      // Priority 1: Use sector_name from API
+      let resolvedSector = singleResult.sector_name;
+      
+      // Priority 2: Fallback to client-side industryMap if API didn't provide it
+      if (!resolvedSector || resolvedSector === '其他') {
+        const stockId_trimmed = singleResult.stock_id.trim();
+        const mappedSector = industryMap[stockId_trimmed];
+        if (mappedSector) {
+          resolvedSector = mappedSector;
+        }
+      }
+
+      // Priority 3: Last resort - use board name
+      if (!resolvedSector) {
+        resolvedSector = market === 'TWSE' ? '上市板' : '上櫃板';
+      }
 
       const augmentedResult = {
         ...singleResult,
@@ -201,10 +213,19 @@ export default function DashboardPage() {
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
           const augmented = batchJson.data.map((r: any) => {
-            const stockId = r.stock_id.trim();
-            const mappedSector = industryMap[stockId];
+            // Priority 1: Use sector_name from API (already includes industry mapping)
+            let resolvedSector = r.sector_name;
+            
+            // Priority 2: Fallback to client-side industryMap if API didn't provide it
+            if (!resolvedSector || resolvedSector === '其他') {
+              const stockId = r.stock_id.trim();
+              const mappedSector = industryMap[stockId];
+              if (mappedSector) {
+                resolvedSector = mappedSector;
+              }
+            }
 
-            let resolvedSector = mappedSector;
+            // Priority 3: Last resort - use current selected sector or board name
             if (!resolvedSector) {
               if (currentSectorName && currentSectorName !== '全部類股') {
                 resolvedSector = currentSectorName;
