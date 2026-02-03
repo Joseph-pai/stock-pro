@@ -14,59 +14,69 @@ export const ScannerService = {
      * 5. Return Top 30.
      */
     scanMarket: async (): Promise<AnalysisResult[]> => {
-        console.log('Starting Enhanced Market Scan...');
+        console.log('Starting Parallel Optimized Market Scan...');
 
-        // 1. Fetch Latest Market Data (Day 0)
+        // 1. Fetch Latest Market Snapshot (No Date needed with OpenAPI)
         let latestData: StockData[] = [];
-        let effectiveDate = new Date();
-        let attempts = 0;
-        let found = false;
-        let lastError = '';
-
-        // Try up to 20 days back to find the latest trading day (handles very long holidays)
-        while (!found && attempts < 20) {
-            if (!isWeekend(effectiveDate)) {
-                const dateStr = format(effectiveDate, 'yyyyMMdd');
-                try {
-                    console.log(`[Attempt ${attempts + 1}] Fetching market data for ${dateStr}...`);
-                    latestData = await ExchangeClient.getAllMarketQuotes(dateStr);
-
-                    if (latestData && latestData.length > 50) {
-                        found = true;
-                        console.log(`Successfully fetched data for ${dateStr} (${latestData.length} records)`);
-                        break;
-                    } else {
-                        lastError = `No trading records found for ${dateStr} (fetched ${latestData?.length || 0})`;
-                    }
-                } catch (e: any) {
-                    console.warn(`Fetch failed for ${dateStr}: ${e.message}`);
-                    lastError = `${e.message} (Date: ${dateStr})`;
-                }
-            } else {
-                console.log(`Skipping weekend: ${format(effectiveDate, 'yyyy-MM-dd')}`);
-            }
-
-            if (!found) {
-                effectiveDate = subDays(effectiveDate, 1);
-                attempts++;
-                await new Promise(r => setTimeout(r, 400)); // Balanced delay
-            }
+        try {
+            latestData = await ExchangeClient.getAllMarketQuotes();
+        } catch (e: any) {
+            throw new Error(`Initial snapshot failed: ${e.message}`);
         }
 
-        if (!found || latestData.length === 0) {
-            throw new Error(`Market scan failed. Last error: ${lastError || 'Empty data'}. (Checked 20 days back)`);
+        if (!latestData || latestData.length < 50) {
+            throw new Error(`Market snapshot too small (${latestData?.length}). Holiday?`);
         }
 
-        // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)
-        // Also ensure Close > Open (Red Candle) and Price > 10 (avoid penny stocks if needed, optional)
-        console.log('Filtering Top 100 Candidates...');
+        // 2. Initial Filter: Top 100 by Volume
         const candidates = latestData
             .filter(s => s.Trading_Volume > 2000 && s.close > s.open)
             .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
             .slice(0, 100);
 
+        if (candidates.length === 0) return [];
+
         const candidateIds = new Set(candidates.map(c => c.stock_id));
-        console.log(`Candidates identified: ${candidates.length}`);
+        const historyMap = new Map<string, StockData[]>();
+        candidates.forEach(c => historyMap.set(c.stock_id, [c]));
+
+        // 3. Build Parallel History (Last 10 calendar days)
+        // We generate potential trading dates and fetch them in parallel (max 5 at once)
+        const dayZero = candidates[0].date; // Standard Western Date from Snapshot
+        const pastDates: string[] = [];
+        let cur = dayZero.replace(/-/g, '');
+        let d = new Date(dayZero);
+
+        for (let i = 1; i <= 12; i++) { // Check up to 12 calendar days back
+            const target = subDays(d, i);
+            if (!isWeekend(target)) {
+                pastDates.push(format(target, 'yyyyMMdd'));
+            }
+        }
+
+        console.log(`Fetching history dates in parallel: ${pastDates.join(', ')}`);
+
+        // Limited Parallelism Helper
+        const fetchSubset = async (dateStr: string) => {
+            try {
+                const daily = await ExchangeClient.getAllMarketQuotes(dateStr);
+                daily.forEach(stock => {
+                    if (candidateIds.has(stock.stock_id)) {
+                        const list = historyMap.get(stock.stock_id);
+                        if (list) list.push(stock);
+                    }
+                });
+            } catch (e) {
+                console.warn(`Parallel fetch skip for ${dateStr}`);
+            }
+        };
+
+        // Fetch in 2 chunks to avoid overloading or banning
+        const chunks = [pastDates.slice(0, 5), pastDates.slice(5, 10)];
+        for (const chunk of chunks) {
+            await Promise.all(chunk.map(date => fetchSubset(date)));
+            await new Promise(r => setTimeout(r, 300)); // Small pause
+        }
 
         // 3. Build History (Last 10 Days)
         // We have Day 0. Need Day -1 to -9.
