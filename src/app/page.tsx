@@ -104,9 +104,9 @@ export default function DashboardPage() {
       const candidates = snapshot
         .filter(s => {
           const isTarget = isSearchId && s.stock_id === targetTerm;
-          const isRedK = s.close >= s.open;
+          // Relax pre-filter: Keep volume active stocks regardless of K-line color
           const isVolActive = s.Trading_Volume >= 1.0;
-          return isTarget || (isRedK && isVolActive);
+          return isTarget || isVolActive;
         })
         .sort((a, b) => {
           // Prioritize the search target to ensure it is in the analysis batch
@@ -116,7 +116,7 @@ export default function DashboardPage() {
           if (!aIsTarget && bIsTarget) return 1;
           return b.Trading_Volume - a.Trading_Volume;
         })
-        .slice(0, 150);
+        .slice(0, 300); // Increased slice for more market coverage
 
       // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
