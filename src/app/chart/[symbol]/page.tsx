@@ -265,9 +265,10 @@ export default function ChartPage() {
                         <div className="absolute top-4 left-6 pointer-events-none space-y-2">
                             <div className="flex items-center gap-4 bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
                                 <LegendItem color="bg-amber-500" label="MA5" />
-                                <LegendItem color="bg-blue-500" label="MA10" />
-                                <LegendItem color="bg-purple-500" label="MA20" />
-                                <LegendItem color="bg-yellow-400" label="POC (支撐)" border="border-dashed" />
+                                <LegendItem color="bg-amber-500" label="MA5 (5日均線)" />
+                                <LegendItem color="bg-blue-500" label="MA10 (10日均線)" />
+                                <LegendItem color="bg-purple-500" label="MA20 (20日均線)" />
+                                <LegendItem color="bg-yellow-400" label="POC (支撐價)" border="border-dashed" />
                             </div>
                         </div>
                     </div>

@@ -77,7 +77,7 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
                 lineWidth: 2,
                 lineStyle: 2,
                 axisLabelVisible: true,
-                title: 'POC',
+                title: 'POC (支撐價)',
             });
         }
 
@@ -98,19 +98,19 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
             color: d.close >= d.open ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)',
         })) as any);
 
-        // MAs with smooth colors
+        // MAs with smooth colors and Chinese labels
         if (ma5) {
-            const ma5Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'MA5', crosshairMarkerVisible: false });
+            const ma5Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'MA5 (5日均線)', crosshairMarkerVisible: false });
             const ma5Data = sortedData.map((d, i) => (ma5[i] ? { time: d.time, value: ma5[i] } : null)).filter(Boolean);
             ma5Series.setData(ma5Data as any);
         }
         if (ma10) {
-            const ma10Series = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'MA10', crosshairMarkerVisible: false });
+            const ma10Series = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'MA10 (10日均線)', crosshairMarkerVisible: false });
             const ma10Data = sortedData.map((d, i) => (ma10[i] ? { time: d.time, value: ma10[i] } : null)).filter(Boolean);
             ma10Series.setData(ma10Data as any);
         }
         if (ma20) {
-            const ma20Series = chart.addLineSeries({ color: '#a855f7', lineWidth: 2, title: 'MA20', crosshairMarkerVisible: false });
+            const ma20Series = chart.addLineSeries({ color: '#a855f7', lineWidth: 2, title: 'MA20 (20日均線)', crosshairMarkerVisible: false });
             const ma20Data = sortedData.map((d, i) => (ma20[i] ? { time: d.time, value: ma20[i] } : null)).filter(Boolean);
             ma20Series.setData(ma20Data as any);
         }
@@ -141,8 +141,8 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
 
     return (
         <div className="w-full h-full relative group">
-            <div ref={chartContainerRef} className="w-full h-full" />
-            <div className="absolute inset-0 pointer-events-none border border-white/5 rounded-3xl group-hover:border-white/10 transition-colors" />
+            <div ref={chartContainerRef} className="w-full h-full border border-white/10 rounded-2xl overflow-hidden" />
+            <div className="absolute inset-0 pointer-events-none border border-white/5 rounded-2xl group-hover:border-white/10 transition-colors" />
         </div>
     );
 };

@@ -51,7 +51,13 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                                 {data.stock_name}
                             </h3>
                             {data.sector_name && (
-                                <span className="text-lg font-black text-slate-500 bg-slate-800/80 px-4 py-1.5 rounded-xl border border-white/5 uppercase tracking-widest">
+                                <span className={cn(
+                                    "text-sm font-black px-3 py-1.5 rounded-lg border font-mono tracking-widest",
+                                    // Highlight if it's a specific industry (not generic board name)
+                                    !data.sector_name?.includes('板') 
+                                        ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                        : "bg-slate-800/80 text-slate-500 border-white/5"
+                                )}>
                                     {data.sector_name}
                                 </span>
                             )}
