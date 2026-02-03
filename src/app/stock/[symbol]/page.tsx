@@ -249,24 +249,35 @@ export default function StockDetailPage() {
                     "flex-1 flex flex-col",
                     isLandscape ? "w-full h-full overflow-y-auto" : ""
                 )}>
-                    {/* Chart Section with Toggle */}
-                    <div className="px-6 pt-6 pb-3 flex items-center justify-between">
+                    {/* Chart Section with Toggle - Sticky Header */}
+                    <div className="px-6 py-4 flex items-center justify-between sticky top-0 bg-slate-950/95 backdrop-blur-xl z-[60] border-b border-white/5 shadow-2xl">
                         <h3 className="text-lg font-black text-slate-300 flex items-center gap-2">
                             <LineChart className="w-5 h-5 text-blue-400" />
-                            技術走勢圖及共振指標
+                            技術走勢圖及共振指標分析
                         </h3>
                         <button
-                            onClick={() => setShowChart(!showChart)}
-                            className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-sm font-black text-slate-400 hover:text-blue-400 hover:border-blue-500/30 transition-all flex items-center gap-2"
+                            type="button"
+                            onClick={() => setShowChart(prev => !prev)}
+                            className={clsx(
+                                "px-4 py-2 rounded-xl border-2 transition-all flex items-center gap-3 active:scale-95 shadow-lg cursor-pointer select-none",
+                                showChart
+                                    ? "bg-blue-600/20 border-blue-500/50 text-blue-400"
+                                    : "bg-slate-800 border-white/20 text-slate-400"
+                            )}
                         >
-                            <span className={clsx("w-2 h-2 rounded-full", showChart ? "bg-emerald-500" : "bg-slate-500")}></span>
-                            {showChart ? '按此隱藏 K 線' : '按此顯示 K 線'}
+                            <span className={clsx(
+                                "w-2.5 h-2.5 rounded-full shadow-lg",
+                                showChart ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-600"
+                            )}></span>
+                            <span className="text-sm font-black tracking-tight whitespace-nowrap">
+                                {showChart ? '按此隱藏 K 線圖' : '按此顯示 K 線圖'}
+                            </span>
                         </button>
                     </div>
 
                     {/* The Chart - Responsive Container with Show/Hide */}
                     {showChart && (
-                        <div className={clsx(
+                        <div key="tradingview-chart-wrapper" className={clsx(
                             "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
                             isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6"
                         )}>
