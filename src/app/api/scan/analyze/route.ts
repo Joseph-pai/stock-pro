@@ -44,6 +44,7 @@ export async function POST(req: Request) {
                         tags: ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'],
                         dailyVolumeTrend: volumes.slice(-10),
                         maConstrictValue: evalData.maData.constrictValue,
+                        today_volume: today.Trading_Volume,
                         volumeIncreasing: checkVolumeIncreasing(volumes)
                     } as AnalysisResult;
                 }

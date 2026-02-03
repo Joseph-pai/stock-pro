@@ -104,6 +104,7 @@ export const ScannerService = {
                                 tags: ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'],
                                 dailyVolumeTrend: volumes.slice(-10),
                                 maConstrictValue: maData.constrictValue,
+                                today_volume: today.Trading_Volume,
                                 volumeIncreasing: checkVolumeIncreasing(volumes)
                             };
                             return result;
@@ -251,7 +252,9 @@ export const ScannerService = {
                 poc: today.close,
                 verdict: '分析完成',
                 tags: ['DISCOVERY'],
-                history: prices
+                history: prices,
+                maConstrictValue: result.maData.constrictValue,
+                today_volume: today.Trading_Volume
             };
         } catch (error: any) {
             console.error(`Analysis failed for ${stockId}:`, error.message);

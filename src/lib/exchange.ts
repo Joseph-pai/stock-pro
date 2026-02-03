@@ -17,10 +17,20 @@ export const ExchangeClient = {
                 const url = `https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&type=${sectorId}`;
                 const res = await axios.get(url, { timeout: 8000 });
                 const data = res.data;
-                const tables = Object.values(data).filter(v => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]) && v[0].length >= 10);
-                if (tables.length === 0) return [];
-                const stocks = tables[0] as string[][];
-                const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
+
+                // TWSE Specific: Handle tables array for specific sector queries
+                let stocks: string[][] = [];
+                if (data.tables && Array.isArray(data.tables)) {
+                    const tableWithData = data.tables.find((t: any) => t.data && Array.isArray(t.data) && t.data.length > 0);
+                    if (tableWithData) stocks = tableWithData.data;
+                } else {
+                    const tables = Object.values(data).filter(v => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]) && v[0].length >= 10);
+                    if (tables.length > 0) stocks = tables[0] as string[][];
+                }
+
+                if (stocks.length === 0) return [];
+
+                const parseNum = (val: string) => parseFloat(val.replace(/,/g, '').replace(/--/g, '0'));
                 return stocks
                     .filter(row => row[0].trim().length === 4)
                     .map(row => ({
@@ -140,10 +150,11 @@ export const ExchangeClient = {
             const twseRes = await axios.get(twseUrl, { timeout: 15000 });
             if (Array.isArray(twseRes.data)) {
                 twseRes.data.forEach((item: any) => {
-                    const code = (item['公司代號'] || item['Code'])?.trim();
-                    const sectorId = item['產業別'] || item['Sector'];
+                    const code = (item['公司代號'] || item['Code'] || item['證券代號'])?.trim();
+                    const sectorId = (item['產業別'] || item['Sector'] || item['產業別名稱'])?.trim();
                     if (code && sectorId) {
-                        mapping[code] = twseMap[sectorId] || '上市板';
+                        // Some APIs return sector name directly, others return ID
+                        mapping[code] = twseMap[sectorId] || sectorId;
                     }
                 });
             }
@@ -153,13 +164,22 @@ export const ExchangeClient = {
             const tpexRes = await axios.get(tpexUrl, { timeout: 15000 });
             if (Array.isArray(tpexRes.data)) {
                 tpexRes.data.forEach((item: any) => {
-                    const code = (item.SecuritiesCompanyCode || item['證券代號'])?.trim();
-                    const sectorName = item['掛牌類別'] || item.Sector;
+                    const code = (item.SecuritiesCompanyCode || item['證券代號'] || item['公司代號'])?.trim();
+                    const sectorName = (item['掛牌類別'] || item.Sector || item['產業別'])?.trim();
                     if (code && sectorName) {
                         mapping[code] = sectorName;
                     }
                 });
             }
+
+            // 3. Robust Fallback / Hard-fixes for common stocks that often fail reporting
+            const HARD_FIXES: Record<string, string> = {
+                '6426': '通信網路',
+                '6451': '半導體業',
+                '2330': '半導體業',
+                '2317': '其他電子'
+            };
+            Object.assign(mapping, HARD_FIXES);
 
             console.log(`[Exchange] Pre-loaded mapping for ${Object.keys(mapping).length} stocks.`);
             return mapping;

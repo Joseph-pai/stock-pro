@@ -74,6 +74,7 @@ export interface AnalysisResult {
     // 專業分析數據
     maConstrictValue?: number;   // 均線糾結度 (0-1)
     volumeIncreasing?: boolean;  // 成交量連續遞增
+    today_volume?: number;       // 今日成交量 (張)
     sector_name?: string;      // 產業名稱
 }
 

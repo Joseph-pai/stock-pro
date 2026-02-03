@@ -97,35 +97,35 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                 </div>
             </div>
 
-            {/* Indicator Grid - Significantly larger fonts */}
+            {/* Indicator Grid - Enhanced for User Request */}
             <div className="mt-8 grid grid-cols-3 gap-6 border-t border-white/5 pt-8">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 mb-1">
-                        <Zap className={cn("w-5 h-5", data.score > 0 ? "text-amber-400 fill-amber-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">綜合評分</span>
+                        <Flame className={cn("w-5 h-5", data.v_ratio >= 1.5 ? "text-amber-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能%</span>
                     </div>
-                    <span className={cn("text-3xl font-black font-mono italic", data.score > 0 ? "text-white" : "text-slate-700")}>
-                        {data.score > 0 ? (data.score * 100).toFixed(0) : '85'}
+                    <span className={cn("text-3xl font-black font-mono italic", data.v_ratio >= 1.5 ? "text-white" : "text-slate-700")}>
+                        {(data.v_ratio * 100).toFixed(0)}%
                     </span>
                 </div>
 
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 mb-1">
-                        <Activity className={cn("w-5 h-5", data.v_ratio > 0 ? "text-blue-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能倍數</span>
+                        <Activity className={cn("w-5 h-5", (data.maConstrictValue || 1) <= 0.05 ? "text-purple-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">均線糾結</span>
                     </div>
-                    <span className={cn("text-3xl font-black font-mono", data.v_ratio > 0 ? "text-white" : "text-slate-700")}>
-                        {data.v_ratio > 0 ? `${data.v_ratio.toFixed(1)}x` : '3.5x'}
+                    <span className={cn("text-3xl font-black font-mono", (data.maConstrictValue || 1) <= 0.05 ? "text-white" : "text-slate-700")}>
+                        {data.maConstrictValue ? `${(data.maConstrictValue * 100).toFixed(1)}%` : '--'}
                     </span>
                 </div>
 
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 mb-1">
-                        <ShieldCheck className={cn("w-5 h-5", data.consecutive_buy > 0 ? "text-rose-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">籌碼動向</span>
+                        <Zap className={cn("w-5 h-5", data.today_volume && data.today_volume > 0 ? "text-blue-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能數值</span>
                     </div>
-                    <span className={cn("text-lg font-black uppercase tracking-tighter truncate", data.consecutive_buy > 0 ? "text-rose-300" : "text-slate-600")}>
-                        {data.consecutive_buy > 0 ? `${data.consecutive_buy}日連買` : '分析中'}
+                    <span className={cn("text-2xl font-black font-mono", data.today_volume ? "text-white" : "text-slate-700")}>
+                        {data.today_volume ? `${Math.round(data.today_volume).toLocaleString()} 張` : '--'}
                     </span>
                 </div>
             </div>
