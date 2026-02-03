@@ -30,13 +30,10 @@ export const ExchangeClient = {
 
     /**
      * Get TWSE Daily Quotes
-     * Snapshot (dateStr null): Uses high-speed OpenAPI
-     * History (dateStr set): Uses MI_INDEX (Filtered for performance)
      */
     getTwseDailyQuotes: async (dateStr?: string, filterIds?: Set<string>): Promise<StockData[]> => {
         try {
             if (!dateStr) {
-                // High-speed Snapshot for TODAY
                 const url = `https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL`;
                 const res = await axios.get(url, { timeout: 8000 });
                 if (!Array.isArray(res.data)) return [];
@@ -55,7 +52,6 @@ export const ExchangeClient = {
                 })).filter(s => s.close > 0);
             }
 
-            // History fetch via MI_INDEX
             const url = `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${dateStr}&type=ALLBUT0999&response=json`;
             const res = await axios.get(url, { timeout: 8000 });
             if (res.data.stat !== 'OK') return [];
@@ -88,7 +84,7 @@ export const ExchangeClient = {
             };
 
             return quotesIn
-                .filter(row => !filterIds || filterIds.has(row[idxId])) // FILTER FIRST to save memory
+                .filter(row => !filterIds || filterIds.has(row[idxId]))
                 .map(row => {
                     const close = parseNum(row[idxClose]);
                     if (close === 0) return null;
@@ -100,17 +96,13 @@ export const ExchangeClient = {
                         Trading_turnover: 0,
                         Trading_money: 0,
                         open: parseNum(row[idxOpen]),
-                        max: close, // Approximate for history
+                        max: close,
                         min: close,
                         close: close,
                         spread: 0,
                     };
                 }).filter(Boolean) as StockData[];
-
-        } catch (error: any) {
-            console.warn(`TWSE Fetch Error: ${error.message}`);
-            return [];
-        }
+        } catch { return []; }
     },
 
     /**
@@ -137,7 +129,6 @@ export const ExchangeClient = {
             };
 
             if (dateStr) {
-                // Parse legacy TPEx format
                 return data
                     .filter(row => !filterIds || filterIds.has(row[0]))
                     .map(row => ({
@@ -154,7 +145,6 @@ export const ExchangeClient = {
                         Trading_turnover: parseNum(row[9]),
                     })).filter(s => s.close > 0);
             } else {
-                // Parse OpenAPI TPEx format
                 return data.map((item: any) => ({
                     stock_id: item.SecuritiesCompanyCode,
                     stock_name: item.CompanyName,
@@ -169,10 +159,7 @@ export const ExchangeClient = {
                     Trading_turnover: parseNum(item.TransactionNumber),
                 })).filter(s => s.close > 0);
             }
-        } catch (error: any) {
-            console.warn(`TPEx Fetch Error: ${error.message}`);
-            return [];
-        }
+        } catch { return []; }
     },
 
     getAllMarketQuotes: async (dateStr?: string, filterIds?: Set<string>): Promise<StockData[]> => {
@@ -186,30 +173,46 @@ export const ExchangeClient = {
     },
 
     /**
-     * Stock History Fallback (Stage 2)
-     * Full month history for single stock
+     * Correct Robust History Fetch with Multi-Month Backfill
      */
     getStockHistory: async (stockId: string): Promise<StockData[]> => {
+        console.log(`[Exchange] Robust History fetch for ${stockId}...`);
         const now = new Date();
-        const fetchTwse = async () => {
-            const ds = now.toISOString().slice(0, 10).replace(/-/g, '').slice(0, 6);
+        const results: StockData[] = [];
+
+        const fetchMonth = async (date: Date) => {
+            const ds = date.toISOString().slice(0, 10).replace(/-/g, '').slice(0, 6);
             const url = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=${ds}01&stockNo=${stockId}&response=json`;
-            const res = await axios.get(url, { timeout: 6000 });
-            if (res.data.stat !== 'OK') return [];
-            return res.data.data.map((row: any) => ({
-                date: ExchangeClient.convertRocDateToWestern(row[0]),
-                stock_id: stockId,
-                stock_name: '',
-                Trading_Volume: parseInt(row[1]?.replace(/,/g, '') || '0'),
-                Trading_money: parseInt(row[2]?.replace(/,/g, '') || '0'),
-                open: parseFloat(row[3]?.replace(/,/g, '') || '0'),
-                max: parseFloat(row[4]?.replace(/,/g, '') || '0'),
-                min: parseFloat(row[5]?.replace(/,/g, '') || '0'),
-                close: parseFloat(row[6]?.replace(/,/g, '') || '0'),
-                spread: parseFloat(row[7]?.replace(/X/g, '') || '0'),
-                Trading_turnover: parseInt(row[8]?.replace(/,/g, '') || '0')
-            }));
+            try {
+                const res = await axios.get(url, { timeout: 6000 });
+                if (res.data.stat !== 'OK' || !res.data.data) return [];
+                return res.data.data.map((row: any) => ({
+                    date: ExchangeClient.convertRocDateToWestern(row[0]),
+                    stock_id: stockId,
+                    stock_name: '',
+                    Trading_Volume: parseInt(row[1]?.replace(/,/g, '') || '0'),
+                    Trading_money: parseInt(row[2]?.replace(/,/g, '') || '0'),
+                    open: parseFloat(row[3]?.replace(/,/g, '') || '0'),
+                    max: parseFloat(row[4]?.replace(/,/g, '') || '0'),
+                    min: parseFloat(row[5]?.replace(/,/g, '') || '0'),
+                    close: parseFloat(row[6]?.replace(/,/g, '') || '0'),
+                    spread: parseFloat(row[7]?.replace(/X/g, '') || '0'),
+                    Trading_turnover: parseInt(row[8]?.replace(/,/g, '') || '0')
+                }));
+            } catch { return []; }
         };
-        try { return await fetchTwse(); } catch { return []; }
+
+        // 1. Fetch Current Month
+        const currentMonth = await fetchMonth(now);
+        results.push(...currentMonth);
+
+        // 2. Backfill if needed (Ensure at least 20 trading days for indicators)
+        if (results.length < 20) {
+            const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonth = await fetchMonth(prevMonthDate);
+            results.push(...prevMonth);
+        }
+
+        return results.sort((a, b) => a.date.localeCompare(b.date));
     }
 };
