@@ -102,7 +102,12 @@ export const ExchangeClient = {
                     const suffix = key.slice(4);
                     const fieldsKey = 'fields' + suffix;
                     const fields = res.data[fieldsKey];
-                    if (Array.isArray(fields) && (fields.includes('證券代號') || fields.includes('股票代號'))) {
+
+                    // Robust check: trim and partial match to handle hidden chars or format changes
+                    if (Array.isArray(fields) && fields.some(f => {
+                        const cf = f.trim();
+                        return cf === '證券代號' || cf === '股票代號' || cf.includes('代號');
+                    })) {
                         quotesIn = res.data[key];
                         fieldsIn = fields;
                         break;
@@ -111,7 +116,8 @@ export const ExchangeClient = {
             }
 
             if (quotesIn.length === 0) {
-                console.warn(`TWSE: No stock table found in response for ${qDate}. Available keys: ${keys.filter(k => k.startsWith('fields')).join(', ')}`);
+                const fieldsMap = keys.filter(k => k.startsWith('fields')).map(k => `${k}:[${(res.data[k] || []).slice(0, 3).join(',')}]`);
+                console.warn(`TWSE: No stock table found for ${qDate}. Stat: ${res.data.stat}. Fields mapping: ${fieldsMap.join(' | ')}`);
                 return [];
             }
 
@@ -123,36 +129,40 @@ export const ExchangeClient = {
                 return clean === '--' || clean === '---' ? 0 : parseFloat(clean);
             };
 
-            // Map fields to indices
-            const idxId = fieldsIn.indexOf('證券代號');
-            const idxName = fieldsIn.indexOf('證券名稱');
-            const idxVol = fieldsIn.indexOf('成交股數');
-            const idxTo = fieldsIn.indexOf('成交筆數');
-            const idxMoney = fieldsIn.indexOf('成交金額');
-            const idxOpen = fieldsIn.indexOf('開盤價');
-            const idxMax = fieldsIn.indexOf('最高價');
-            const idxMin = fieldsIn.indexOf('最低價');
-            const idxClose = fieldsIn.indexOf('收盤價');
-            const idxSign = fieldsIn.indexOf('漲跌(+/-)');
-            const idxDiff = fieldsIn.indexOf('漲跌價差');
+            // Map fields to indices using fuzzy matching
+            const findIdx = (targets: string[]) => fieldsIn.findIndex(f => targets.some(t => f.trim().includes(t)));
+
+            const idxId = findIdx(['證券代號', '股票代號', '代號']);
+            const idxName = findIdx(['證券名稱', '股票名稱', '名稱']);
+            const idxVol = findIdx(['成交股數', '成交量']);
+            const idxTo = findIdx(['成交筆數']);
+            const idxMoney = findIdx(['成交金額']);
+            const idxOpen = findIdx(['開盤價', '開盤']);
+            const idxMax = findIdx(['最高價', '最高']);
+            const idxMin = findIdx(['最低價', '最低']);
+            const idxClose = findIdx(['收盤價', '收盤']);
+            const idxSign = findIdx(['漲跌(+/-)', '漲跌']);
+            const idxDiff = findIdx(['漲跌價差', '價差']);
 
             return quotesIn.map((row: string[]) => {
+                if (idxId === -1 || idxClose === -1) return null;
+
                 const close = parseNum(row[idxClose]);
                 if (close === 0) return null;
 
-                let diff = parseNum(row[idxDiff]);
-                if (row[idxSign] && row[idxSign].includes('-')) diff = -diff;
+                let diff = idxDiff !== -1 ? parseNum(row[idxDiff]) : 0;
+                if (idxSign !== -1 && row[idxSign] && row[idxSign].includes('-')) diff = -diff;
 
                 return {
                     stock_id: row[idxId],
-                    stock_name: row[idxName],
+                    stock_name: idxName !== -1 ? row[idxName] : '',
                     date: finalDate,
-                    Trading_Volume: parseNum(row[idxVol]),
-                    Trading_turnover: parseNum(row[idxTo]),
-                    Trading_money: parseNum(row[idxMoney]),
-                    open: parseNum(row[idxOpen]),
-                    max: parseNum(row[idxMax]),
-                    min: parseNum(row[idxMin]),
+                    Trading_Volume: idxVol !== -1 ? parseNum(row[idxVol]) : 0,
+                    Trading_turnover: idxTo !== -1 ? parseNum(row[idxTo]) : 0,
+                    Trading_money: idxMoney !== -1 ? parseNum(row[idxMoney]) : 0,
+                    open: idxOpen !== -1 ? parseNum(row[idxOpen]) : 0,
+                    max: idxMax !== -1 ? parseNum(row[idxMax]) : 0,
+                    min: idxMin !== -1 ? parseNum(row[idxMin]) : 0,
                     close: close,
                     spread: diff,
                 };
