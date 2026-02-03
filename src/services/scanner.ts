@@ -23,20 +23,20 @@ export const ScannerService = {
         let found = false;
         let lastError = '';
 
-        // Try up to 15 days back to find the latest trading day (handles long holidays like Lunar New Year)
-        while (!found && attempts < 15) {
+        // Try up to 20 days back to find the latest trading day (handles very long holidays)
+        while (!found && attempts < 20) {
             if (!isWeekend(effectiveDate)) {
                 const dateStr = format(effectiveDate, 'yyyyMMdd');
                 try {
                     console.log(`[Attempt ${attempts + 1}] Fetching market data for ${dateStr}...`);
                     latestData = await ExchangeClient.getAllMarketQuotes(dateStr);
 
-                    if (latestData && latestData.length > 100) {
+                    if (latestData && latestData.length > 50) {
                         found = true;
                         console.log(`Successfully fetched data for ${dateStr} (${latestData.length} records)`);
                         break;
                     } else {
-                        lastError = `No trading records found for ${dateStr}`;
+                        lastError = `No trading records found for ${dateStr} (fetched ${latestData?.length || 0})`;
                     }
                 } catch (e: any) {
                     console.warn(`Fetch failed for ${dateStr}: ${e.message}`);
@@ -49,13 +49,12 @@ export const ScannerService = {
             if (!found) {
                 effectiveDate = subDays(effectiveDate, 1);
                 attempts++;
-                // Add 300ms delay instead of 600ms to stay within timeout limits
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, 400)); // Balanced delay
             }
         }
 
         if (!found || latestData.length === 0) {
-            throw new Error(`Market scan failed. Last error: ${lastError || 'Empty data'}. (Checked 15 days back)`);
+            throw new Error(`Market scan failed. Last error: ${lastError || 'Empty data'}. (Checked 20 days back)`);
         }
 
         // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)
