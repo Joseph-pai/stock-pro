@@ -22,33 +22,33 @@ export async function POST(req: Request) {
         const batchResults = await Promise.allSettled(
             stocks.map(async (stock: { id: string, name: string }) => {
                 const history = await ExchangeClient.getStockHistory(stock.id);
+                if (history.length < 3) return null; // Minimum data required
+
                 const evalData = evaluateStock(history, settings);
+                const today = history[history.length - 1];
+                const volumes = history.map(h => h.Trading_Volume);
 
-                if (evalData && evalData.isQualified) {
-                    const today = history[history.length - 1];
-                    const volumes = history.map(h => h.Trading_Volume);
+                const result: AnalysisResult = {
+                    stock_id: stock.id,
+                    stock_name: stock.name || stock.id,
+                    close: today.close,
+                    change_percent: history.length > 1 ? (today.close - history[history.length - 2].close) / history[history.length - 2].close : 0,
+                    score: 0,
+                    v_ratio: evalData ? parseFloat(evalData.vRatio.toFixed(2)) : 0,
+                    is_ma_aligned: evalData ? evalData.maData.isSqueezing : false,
+                    is_ma_breakout: evalData ? evalData.isBreakout : false,
+                    consecutive_buy: 0,
+                    poc: today.close,
+                    verdict: evalData?.isQualified ? '三大信號共振 - 爆發前兆' : '分析完成',
+                    tags: evalData?.isQualified ? ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'] : ['DISCOVERY'],
+                    dailyVolumeTrend: volumes.slice(-10),
+                    maConstrictValue: evalData?.maData.constrictValue || 0,
+                    today_volume: today.Trading_Volume,
+                    volumeIncreasing: checkVolumeIncreasing(volumes),
+                    is_recommended: evalData?.isQualified || false
+                };
 
-                    return {
-                        stock_id: stock.id,
-                        stock_name: stock.name || stock.id,
-
-                        close: today.close,
-                        change_percent: evalData.changePercent,
-                        score: 0,
-                        v_ratio: parseFloat(evalData.vRatio.toFixed(2)),
-                        is_ma_aligned: evalData.maData.isSqueezing,
-                        is_ma_breakout: evalData.isBreakout,
-                        consecutive_buy: 0,
-                        poc: today.close,
-                        verdict: '三大信號共振 - 爆發前兆',
-                        tags: ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'],
-                        dailyVolumeTrend: volumes.slice(-10),
-                        maConstrictValue: evalData.maData.constrictValue,
-                        today_volume: today.Trading_Volume,
-                        volumeIncreasing: checkVolumeIncreasing(volumes)
-                    } as AnalysisResult;
-                }
-                return null;
+                return result;
             })
         );
 

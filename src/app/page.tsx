@@ -84,28 +84,29 @@ export default function DashboardPage() {
       setStage('filtering');
       setProgress({ current: 0, total: snapshot.length, phase: '正在篩選潛力候選股...' });
 
+      const isSearchId = searchTerm.trim().length === 4 && !isNaN(parseInt(searchTerm));
+
       const candidates = snapshot
         .filter(s => {
+          const isTarget = isSearchId && s.stock_id === searchTerm.trim();
           const isRedK = s.close >= s.open;
           const isVolActive = s.Trading_Volume >= 1.0;
-          // Broaden search for deep analysis
-          return isRedK && isVolActive;
+          return isTarget || (isRedK && isVolActive);
         })
         .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-        .slice(0, 150); // Increased batch size for better coverage
+        .slice(0, 150);
 
       // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
       const BATCH_SIZE = 15;
       const allResults: AnalysisResult[] = [];
-      const t2_start = Date.now();
 
       for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
         const batch = candidates.slice(i, i + BATCH_SIZE);
         setProgress({
           current: i + batch.length,
           total: candidates.length,
-          phase: `三大信號共振分析中 (${i + batch.length}/${candidates.length})`
+          phase: `指標數據分析中 (${i + batch.length}/${candidates.length})`
         });
 
         const batchRes = await fetch('/api/scan/analyze', {
@@ -119,7 +120,6 @@ export default function DashboardPage() {
 
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
-          // Robust sector resolution: Mapping -> Selected Sector -> Market Type
           const augmented = batchJson.data.map((r: any) => {
             const stockId = r.stock_id.trim();
             const mappedSector = industryMap[stockId];
@@ -143,7 +143,13 @@ export default function DashboardPage() {
       }
 
       const t_end = Date.now();
-      setResults(allResults);
+      // Only keep recommended stocks OR the specifically searched stock
+      const filteredResults = allResults.filter(r => {
+        const isTarget = r.stock_id.includes(searchTerm) || r.stock_name.includes(searchTerm);
+        return r.is_recommended || (searchTerm.length >= 2 && isTarget);
+      });
+
+      setResults(filteredResults);
       setTiming({
         snapshot: t1 - t0,
         analyze: t_end - t1,
