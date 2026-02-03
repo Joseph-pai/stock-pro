@@ -197,8 +197,11 @@ export async function POST(req: Request) {
         batchResults.forEach(r => {
             if (r.status === 'fulfilled' && r.value) {
                 results.push(r.value);
+                console.log(`[Analyze] ✓ ${r.value.stock_id} (${r.value.stock_name}): sector="${r.value.sector_name}"`);
             }
         });
+
+        console.log(`[Analyze API] Batch complete: ${results.length}/${stocks.length} analyzed`);
 
         return NextResponse.json({
             success: true,

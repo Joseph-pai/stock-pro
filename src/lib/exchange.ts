@@ -152,6 +152,16 @@ export const ExchangeClient = {
     getIndustryMapping: async (): Promise<Record<string, string>> => {
         const mapping: Record<string, string> = {};
 
+        // Robust Fallback / Hard-fixes for common stocks (apply first as base)
+        const HARD_FIXES: Record<string, string> = {
+            '2887': '貿易百貨',        // 台新新光金
+            '6426': '通信網路',        // 統新
+            '6451': '半導體業',
+            '2330': '半導體業',
+            '2317': '其他電子'
+        };
+        Object.assign(mapping, HARD_FIXES);
+
         // Lookup name maps
         const twseMap: any = {};
         SECTORS.TWSE.forEach(s => twseMap[s.id] = s.name);
@@ -186,20 +196,21 @@ export const ExchangeClient = {
                 });
             }
 
-            // 3. Robust Fallback / Hard-fixes for common stocks that often fail reporting
-            const HARD_FIXES: Record<string, string> = {
-                '2887': '貿易百貨',        // 台新新光金
-                '6426': '通信網路',        // 統新
-                '6451': '半導體業',
-                '2330': '半導體業',
-                '2317': '其他電子'
-            };
+            // Re-apply hard fixes to ensure they always override (in case API has outdated data)
             Object.assign(mapping, HARD_FIXES);
 
-            console.log(`[Exchange] Pre-loaded mapping for ${Object.keys(mapping).length} stocks.`);
+            // Enhanced logging for industry mapping
+            Object.keys(mapping).forEach(code => {
+                const source = HARD_FIXES[code] ? 'Hard Fix' : 'API';
+                console.log(`[Exchange] Stock ${code}: Sector="${mapping[code]}" (Source=${source})`);
+            });
+
+            console.log(`[Exchange] Loaded industry mapping for ${Object.keys(mapping).length} stocks (including ${Object.keys(HARD_FIXES).length} hard-fixes).`);
             return mapping;
         } catch (e) {
             console.error('[Exchange] Mapping synchronization failed:', e);
+            // Return at least the hard-fixes
+            console.log(`[Exchange] Returning ${Object.keys(mapping).length} hard-fixed stocks as fallback.`);
             return mapping;
         }
     }
