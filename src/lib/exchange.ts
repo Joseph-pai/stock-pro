@@ -82,7 +82,8 @@ export const ExchangeClient = {
             const parseNum = (val: any) => {
                 if (typeof val === 'number') return val;
                 if (!val) return 0;
-                return parseFloat(String(val).replace(/,/g, ''));
+                const parsed = parseFloat(String(val).replace(/,/g, ''));
+                return isNaN(parsed) ? 0 : parsed;
             };
 
             return res.data.map((item: any) => ({
@@ -104,7 +105,8 @@ export const ExchangeClient = {
             const parseNum = (val: any) => {
                 if (typeof val === 'number') return val;
                 if (!val) return 0;
-                return parseFloat(String(val).replace(/,/g, ''));
+                const parsed = parseFloat(String(val).replace(/,/g, ''));
+                return isNaN(parsed) ? 0 : parsed;
             };
 
             return res.data.map((item: any) => ({
@@ -116,7 +118,7 @@ export const ExchangeClient = {
                 open: parseNum(item.Open),
                 max: parseNum(item.High),
                 min: parseNum(item.Low),
-                Trading_Volume: parseNum(item.Volume) / 1000,
+                Trading_Volume: (parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume)) / 1000,
             })).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
         }
     },
