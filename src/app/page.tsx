@@ -104,8 +104,8 @@ export default function DashboardPage() {
       const candidates = snapshot
         .filter(s => {
           const isTarget = isSearchId && s.stock_id === targetTerm;
-          // Relax pre-filter: Keep volume active stocks regardless of K-line color
-          const isVolActive = s.Trading_Volume >= 1.0;
+          // Relax pre-filter: Keep all stocks with any volume to ensure maximum coverage
+          const isVolActive = s.Trading_Volume > 0;
           return isTarget || isVolActive;
         })
         .sort((a, b) => {

@@ -79,32 +79,44 @@ export const ExchangeClient = {
         if (market === 'TWSE') {
             const url = `https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL`;
             const res = await axios.get(url);
+            const parseNum = (val: any) => {
+                if (typeof val === 'number') return val;
+                if (!val) return 0;
+                return parseFloat(String(val).replace(/,/g, ''));
+            };
+
             return res.data.map((item: any) => ({
                 stock_id: item.Code?.trim(),
                 stock_name: item.Name?.trim(),
                 date: format(new Date(), 'yyyy-MM-dd'),
-                open: parseFloat(item.OpeningPrice),
-                max: parseFloat(item.HighestPrice),
-                min: parseFloat(item.LowestPrice),
-                close: parseFloat(item.ClosingPrice),
-                spread: parseFloat(item.Change),
-                Trading_Volume: parseFloat(item.TradeVolume) / 1000,
-                Trading_money: parseFloat(item.TradeValue),
-                Trading_turnover: parseFloat(item.Transaction),
+                open: parseNum(item.OpeningPrice),
+                max: parseNum(item.HighestPrice),
+                min: parseNum(item.LowestPrice),
+                close: parseNum(item.ClosingPrice),
+                spread: parseNum(item.Change),
+                Trading_Volume: parseNum(item.TradeVolume) / 1000,
+                Trading_money: parseNum(item.TradeValue),
+                Trading_turnover: parseNum(item.Transaction),
             })).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
         } else {
             const url = `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes`;
             const res = await axios.get(url);
+            const parseNum = (val: any) => {
+                if (typeof val === 'number') return val;
+                if (!val) return 0;
+                return parseFloat(String(val).replace(/,/g, ''));
+            };
+
             return res.data.map((item: any) => ({
                 stock_id: item.SecuritiesCompanyCode?.trim(),
                 stock_name: item.CompanyName?.trim(),
                 date: format(new Date(), 'yyyy-MM-dd'),
-                close: parseFloat(item.Close),
-                spread: parseFloat(item.Change),
-                open: parseFloat(item.Open),
-                max: parseFloat(item.High),
-                min: parseFloat(item.Low),
-                Trading_Volume: parseFloat(item.Volume) / 1000,
+                close: parseNum(item.Close),
+                spread: parseNum(item.Change),
+                open: parseNum(item.Open),
+                max: parseNum(item.High),
+                min: parseNum(item.Low),
+                Trading_Volume: parseNum(item.Volume) / 1000,
             })).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
         }
     },
