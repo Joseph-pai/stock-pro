@@ -23,37 +23,38 @@ export const ScannerService = {
         let found = false;
         let lastError = '';
 
-        // Try up to 5 days back to find the latest trading day
-        while (!found && attempts < 5) {
+        // Try up to 15 days back to find the latest trading day (handles long holidays like Lunar New Year)
+        while (!found && attempts < 15) {
             if (!isWeekend(effectiveDate)) {
                 const dateStr = format(effectiveDate, 'yyyyMMdd');
                 try {
-                    console.log(`Attempting to fetch market data for ${dateStr}...`);
+                    console.log(`[Attempt ${attempts + 1}] Fetching market data for ${dateStr}...`);
                     latestData = await ExchangeClient.getAllMarketQuotes(dateStr);
 
-                    if (latestData && latestData.length > 50) { // Safety check: must have enough data
+                    if (latestData && latestData.length > 100) {
                         found = true;
                         console.log(`Successfully fetched data for ${dateStr} (${latestData.length} records)`);
                         break;
                     } else {
-                        lastError = `Empty data received for ${dateStr}`;
+                        lastError = `No trading records found for ${dateStr}`;
                     }
                 } catch (e: any) {
                     console.warn(`Fetch failed for ${dateStr}: ${e.message}`);
                     lastError = `${e.message} (Date: ${dateStr})`;
                 }
+            } else {
+                console.log(`Skipping weekend: ${format(effectiveDate, 'yyyy-MM-dd')}`);
             }
 
             if (!found) {
                 effectiveDate = subDays(effectiveDate, 1);
                 attempts++;
-                // Add 500ms delay to be nice to APIs
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 600)); // Be respectful to APIs
             }
         }
 
         if (!found || latestData.length === 0) {
-            throw new Error(`Market scan failed. Last error: ${lastError || 'Unknown'}. (Tried 5 days)`);
+            throw new Error(`Market scan failed. Last error: ${lastError || 'Empty data'}. (Checked 15 days back)`);
         }
 
         // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)

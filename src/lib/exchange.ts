@@ -26,11 +26,42 @@ export const ExchangeClient = {
      */
     convertRocDateToWestern: (rocDate: string): string => {
         if (!rocDate) return '';
-        const parts = rocDate.split('/');
-        if (parts.length !== 3) return rocDate;
 
-        const year = parseInt(parts[0], 10) + 1911;
-        return `${year}-${parts[1]}-${parts[2]}`;
+        // Remove all non-numeric characters to see the raw sequence
+        const digits = rocDate.replace(/[^\d]/g, '');
+
+        // Handle slashes or dots: "113/05/20" or "113.05.20"
+        const parts = rocDate.split(/[\/\.]/);
+        if (parts.length === 3) {
+            let year = parseInt(parts[0], 10);
+            if (year < 1000) year += 1911; // ROC conversion
+            const m = parts[1].padStart(2, '0');
+            const d = parts[2].padStart(2, '0');
+            return `${year}-${m}-${d}`;
+        }
+
+        // Handle "20240520" (Western compact)
+        if (digits.length === 8) {
+            return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+        }
+
+        // Handle "1130520" (ROC compact)
+        if (digits.length === 7) {
+            const y = parseInt(digits.slice(0, 3), 10) + 1911;
+            const m = digits.slice(3, 5);
+            const d = digits.slice(5, 7);
+            return `${y}-${m}-${d}`;
+        }
+
+        // Handle "990520" (ROC compact 2-digit)
+        if (digits.length === 6) {
+            const y = parseInt(digits.slice(0, 2), 10) + 1911;
+            const m = digits.slice(2, 4);
+            const d = digits.slice(4, 6);
+            return `${y}-${m}-${d}`;
+        }
+
+        return rocDate;
     },
 
     /**
