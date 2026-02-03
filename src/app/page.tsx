@@ -60,7 +60,8 @@ export default function DashboardPage() {
     return SECTORS[market].find(s => s.id === sector)?.name || '該類股';
   }, [market, sector]);
 
-  const runScan = async () => {
+  const runScan = async (overrideTerm?: string) => {
+    const activeTerm = overrideTerm || searchTerm;
     setStage('fetching');
     setHasScanned(false);
     setError(null);
@@ -87,11 +88,13 @@ export default function DashboardPage() {
       setStage('filtering');
       setProgress({ current: 0, total: snapshot.length, phase: '正在篩選潛力候選股...' });
 
-      const isSearchId = searchTerm.trim().length === 4 && !isNaN(parseInt(searchTerm));
+      // Match exact stock ID for targeted analysis
+      const targetTerm = activeTerm.trim();
+      const isSearchId = targetTerm.length === 4 && !isNaN(parseInt(targetTerm));
 
       const candidates = snapshot
         .filter(s => {
-          const isTarget = isSearchId && s.stock_id === searchTerm.trim();
+          const isTarget = isSearchId && s.stock_id === targetTerm;
           const isRedK = s.close >= s.open;
           const isVolActive = s.Trading_Volume >= 1.0;
           return isTarget || (isRedK && isVolActive);
@@ -148,8 +151,8 @@ export default function DashboardPage() {
       const t_end = Date.now();
       // Only keep recommended stocks OR the specifically searched stock
       const filteredResults = allResults.filter(r => {
-        const isTarget = r.stock_id.includes(searchTerm) || r.stock_name.includes(searchTerm);
-        return r.is_recommended || (searchTerm.length >= 2 && isTarget);
+        const isTargetMatch = r.stock_id.includes(targetTerm) || r.stock_name.includes(targetTerm);
+        return r.is_recommended || (targetTerm.length >= 2 && isTargetMatch);
       });
 
       setResults(filteredResults);
@@ -353,7 +356,7 @@ export default function DashboardPage() {
           snapshot={snapshot}
           onSearch={(term) => {
             setSearchTerm(term);
-            runScan();
+            runScan(term);
           }}
           isWorking={isWorking}
         />
