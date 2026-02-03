@@ -41,16 +41,25 @@ export default function DashboardPage() {
   const [industryMap, setIndustryMap] = useState<Record<string, string>>({});
   const [snapshot, setSnapshot] = useState<StockData[]>([]);
 
-  // Load industry mapping on mount
+  // Load industry mapping and initial snapshot on mount
   useEffect(() => {
-    fetch('/api/market/industry-mapping')
-      .then(res => res.json())
-      .then(json => {
-        if (json.success) setIndustryMap(json.data);
-      })
-      .catch(console.error);
-  }, []);
+    const init = async () => {
+      try {
+        // 1. Load Industry Mapping
+        const mappingRes = await fetch('/api/market/industry-mapping');
+        const mappingJson = await mappingRes.json();
+        if (mappingJson.success) setIndustryMap(mappingJson.data);
 
+        // 2. Load Initial Snapshot for Search Dropdown (TWSE ALL)
+        const snapshotRes = await fetch('/api/market/snapshot?market=TWSE&sector=ALL');
+        const snapshotJson = await snapshotRes.json();
+        if (snapshotJson.success) setSnapshot(snapshotJson.data);
+      } catch (e) {
+        console.error('Initial data load failed:', e);
+      }
+    };
+    init();
+  }, []);
   // Reset sector when market changes
   useEffect(() => {
     setSector(market === 'TWSE' ? 'ALL' : 'AL');
