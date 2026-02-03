@@ -124,7 +124,10 @@ export const ScannerService = {
                 prices = await ExchangeClient.getStockHistory(stockId);
             }
 
-            if (prices.length < 5) return null;
+            if (prices.length < 3) {
+                console.warn(`[Analyze] Insufficient data for ${stockId} (${prices.length} days found)`);
+                return null;
+            }
 
             const result = evaluateStock(stockId, { prices, insts });
             if (!result) return null;
