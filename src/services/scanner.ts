@@ -49,7 +49,8 @@ export const ScannerService = {
             if (!found) {
                 effectiveDate = subDays(effectiveDate, 1);
                 attempts++;
-                await new Promise(r => setTimeout(r, 600)); // Be respectful to APIs
+                // Add 300ms delay instead of 600ms to stay within timeout limits
+                await new Promise(r => setTimeout(r, 300));
             }
         }
 
@@ -84,7 +85,7 @@ export const ScannerService = {
         let daysFound = 0;
         let lookback = 1;
 
-        while (daysFound < 9 && lookback < 20) { // Try up to 20 days back to find 9 trading days
+        while (daysFound < 7 && lookback < 15) { // Reduce to 7 trading days to save time, try 15 days back
             const targetDate = subDays(d, lookback);
             if (!isWeekend(targetDate)) {
                 pastDates.push(format(targetDate, 'yyyyMMdd'));

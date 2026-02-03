@@ -228,12 +228,20 @@ export const ExchangeClient = {
      */
     getAllMarketQuotes: async (dateStr?: string): Promise<StockData[]> => {
         console.log(`Fetching TWSE & TPEX data for date: ${dateStr || 'Latest'}...`);
-        const [twse, tpex] = await Promise.all([
+
+        // Use allSettled to prevent one failing source from killing the scan
+        const results = await Promise.allSettled([
             ExchangeClient.getTwseDailyQuotes(dateStr),
             ExchangeClient.getTpexDailyQuotes(dateStr)
         ]);
 
-        console.log(`Fetched: TWSE ${twse.length}, TPEX ${tpex.length}`);
+        const twse = results[0].status === 'fulfilled' ? results[0].value : [];
+        const tpex = results[1].status === 'fulfilled' ? results[1].value : [];
+
+        if (results[0].status === 'rejected') console.error('TWSE Fetch Error:', results[0].reason?.message);
+        if (results[1].status === 'rejected') console.error('TPEX Fetch Error:', results[1].reason?.message);
+
+        console.log(`Fetched Summary: TWSE ${twse.length}, TPEX ${tpex.length}`);
         return [...twse, ...tpex];
     },
 
