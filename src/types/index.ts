@@ -49,6 +49,22 @@ export interface AnalysisResult {
 
     // Detailed History (Optional, for Charting)
     history?: StockData[];
+
+    // Enhanced Analysis Fields
+    dailyVolumeTrend?: number[]; // Last 10 days volume
+    kellyResult?: {
+        action: 'Invest' | 'Wait' | 'Avoid';
+        percentage: number;      // % of capital to invest
+        winRate: number;         // Estimated probability
+        riskRewardRatio: number;
+    };
+    riskWarning?: string;        // e.g. "Price below 5MA"
+    comprehensiveScoreDetails?: {
+        volumeScore: number;
+        maScore: number;
+        chipScore: number; // Institutional
+        total: number;
+    };
 }
 
 export interface StockCandle {

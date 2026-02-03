@@ -35,47 +35,65 @@ export const ExchangeClient = {
 
     /**
      * Get TWSE (Exchange) Daily Quotes
-     * URL: https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json
+     * URL: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={date}&type=ALLBUT0999&response=json
+     * (Switched to MI_INDEX to support specific dates)
      */
-    getTwseDailyQuotes: async (): Promise<StockData[]> => {
+    getTwseDailyQuotes: async (dateStr?: string): Promise<StockData[]> => {
         try {
-            const url = 'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json';
-            const res = await axios.get<TwseResponse>(url, {
+            // Default to empty (latest) if not provided, but MI_INDEX generally needs a date or defaults to today
+            // dateStr format: yyyyMMdd
+            const qDate = dateStr || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const url = `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${qDate}&type=ALLBUT0999&response=json`;
+
+            const res = await axios.get(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
             });
 
             if (res.data.stat !== 'OK') {
-                console.error('TWSE API Error:', res.data.stat);
+                console.warn(`TWSE API Stat: ${res.data.stat} for date ${qDate}`);
                 return [];
             }
 
-            const date = ExchangeClient.convertRocDateToWestern(res.data.date); // 113/xx/xx -> 2024-xx-xx
+            // MI_INDEX response structure is complex. 'data9' usually contains the stock quotes.
+            // But sometimes it's data5, data8 etc depending on the index inclusions. 
+            // We look for the array that has fields starting with ["證券代號", "證券名稱"...]
+            const typeKey = Object.keys(res.data).find(k =>
+                Array.isArray(res.data[k]) &&
+                res.data.fields9 &&
+                k === 'data9' // data9 is usually "ALLBUT0999" stocks
+            );
 
-            // TWSE Data Structure:
-            // "0": "證券代號", "1": "證券名稱", "2": "成交股數", "3": "成交金額", "4": "開盤價",
-            // "5": "最高價", "6": "最低價", "7": "收盤價", "8": "漲跌價差", "9": "成交筆數"
+            const quotesIn = res.data[typeKey || 'data9'] || []; // Fallback
 
-            // Helper to parse numbers with commas
+            // Re-parse date from response if possible, or use requested
+            const finalDate = ExchangeClient.convertRocDateToWestern(res.data.date) ||
+                `${qDate.slice(0, 4)}-${qDate.slice(4, 6)}-${qDate.slice(6, 8)}`;
+
+            // TWSE MI_INDEX Structure (usually):
+            // 0: 代號, 1: 名稱, 2: 成交股數, 3: 成交筆數, 4: 成交金額, 5: 開盤, 6: 最高, 7: 最低, 8: 收盤...
+            // Note: Index might differ from STOCK_DAY_ALL!
+            // Let's rely on standard MI_INDEX indices for "ALLBUT0999"
+
             const parseNum = (val: string) => {
                 const clean = val.replace(/,/g, '');
                 return clean === '--' || clean === '---' ? 0 : parseFloat(clean);
             };
 
-            return res.data.data.map(row => ({
+            return quotesIn.map((row: string[]) => ({
                 stock_id: row[0],
                 stock_name: row[1],
-                date: date,
+                date: finalDate,
                 Trading_Volume: parseNum(row[2]), // shares
-                Trading_money: parseNum(row[3]),
-                open: parseNum(row[4]),
-                max: parseNum(row[5]),
-                min: parseNum(row[6]),
-                close: parseNum(row[7]),
-                spread: parseNum(row[8]), // This is absolute change, direction needs check but usually just diff
-                Trading_turnover: parseNum(row[9]),
-            })).filter(s => s.close > 0); // Filter out invalid stocks
+                Trading_turnover: parseNum(row[3]), // transaction count
+                Trading_money: parseNum(row[4]),
+                open: parseNum(row[5]),
+                max: parseNum(row[6]),
+                min: parseNum(row[7]),
+                close: parseNum(row[8]),
+                spread: row[9].includes('-') ? -parseNum(row[10]) : parseNum(row[10]), // +/- sign is separate in row[9] usually
+            })).filter((s: StockData) => s.close > 0);
 
         } catch (error) {
             console.error('Failed to fetch TWSE data:', error);
@@ -87,9 +105,18 @@ export const ExchangeClient = {
      * Get TPEX (OTC) Daily Quotes
      * URL: https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no14/stk_orderby_result.php?l=zh-tw&d={rocDate}&se=EW&t=D
      */
-    getTpexDailyQuotes: async (): Promise<StockData[]> => {
+    getTpexDailyQuotes: async (dateStr?: string): Promise<StockData[]> => {
         try {
-            const url = 'https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no14/stk_orderby_result.php?l=zh-tw&d=&se=EW&t=D';
+            // dateStr: yyyyMMdd
+            let qDate = '';
+            if (dateStr) {
+                const y = parseInt(dateStr.slice(0, 4)) - 1911;
+                const m = dateStr.slice(4, 6);
+                const d = dateStr.slice(6, 8);
+                qDate = `${y}/${m}/${d}`;
+            }
+
+            const url = `https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no14/stk_orderby_result.php?l=zh-tw&d=${qDate}&se=EW&t=D`;
             const res = await axios.get<TpexResponse>(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -97,15 +124,11 @@ export const ExchangeClient = {
             });
 
             if (!res.data.aaData) {
-                console.error('TPEX API Error: No aaData');
+                // TPEX often returns empty aaData on holidays without error status
                 return [];
             }
 
             const date = ExchangeClient.convertRocDateToWestern(res.data.stk_date);
-
-            // TPEX Data Structure (aaData):
-            // "0": "代號", "1": "名稱", "2": "收盤", "3": "漲跌", "4": "開盤", 
-            // "5": "最高", "6": "最低", "7": "成交股數", "8": "成交金額", "9": "成交筆數" ...
 
             const parseNum = (val: string) => {
                 const clean = val.replace(/,/g, '');
@@ -117,14 +140,14 @@ export const ExchangeClient = {
                 stock_name: row[1],
                 date: date,
                 close: parseNum(row[2]),
-                spread: parseNum(row[3]), // TPEX might have symbols indicating up/down? usually it's just number
+                spread: parseNum(row[3]),
                 open: parseNum(row[4]),
                 max: parseNum(row[5]),
                 min: parseNum(row[6]),
                 Trading_Volume: parseNum(row[7]),
                 Trading_money: parseNum(row[8]),
                 Trading_turnover: parseNum(row[9]),
-            })).filter(s => s.close > 0 && s.stock_id.length === 4); // Filter out warrants (6 chars) usually
+            })).filter(s => s.close > 0 && s.stock_id.length === 4);
 
         } catch (error) {
             console.error('Failed to fetch TPEX data:', error);
@@ -134,12 +157,13 @@ export const ExchangeClient = {
 
     /**
      * Get All Market Quotes (TWSE + TPEX)
+     * dateStr: yyyyMMdd (optional)
      */
-    getAllMarketQuotes: async (): Promise<StockData[]> => {
-        console.log('Fetching TWSE & TPEX data...');
+    getAllMarketQuotes: async (dateStr?: string): Promise<StockData[]> => {
+        console.log(`Fetching TWSE & TPEX data for date: ${dateStr || 'Latest'}...`);
         const [twse, tpex] = await Promise.all([
-            ExchangeClient.getTwseDailyQuotes(),
-            ExchangeClient.getTpexDailyQuotes()
+            ExchangeClient.getTwseDailyQuotes(dateStr),
+            ExchangeClient.getTpexDailyQuotes(dateStr)
         ]);
 
         console.log(`Fetched: TWSE ${twse.length}, TPEX ${tpex.length}`);

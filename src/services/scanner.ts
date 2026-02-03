@@ -2,18 +2,22 @@ import { FinMindClient } from '@/lib/finmind';
 import { ExchangeClient } from '@/lib/exchange';
 import { evaluateStock } from './engine';
 import { AnalysisResult, StockData } from '@/types';
-import { format, subDays } from 'date-fns';
+import { format, subDays, isWeekend } from 'date-fns';
 
 export const ScannerService = {
     /**
-     * Stage 1: Fast Market Scan (Official Sources Only)
-     * Returns top candidates based on technical criteria (Volume, Price Change).
-     * Does NOT call FinMind to avoid rate limits.
+     * Stage 1: Enhanced Market Scan
+     * 1. Get Today's Market Snapshot.
+     * 2. Select Top 100 by Volume.
+     * 3. Fetch past 10 days market snapshots to build mini-history.
+     * 4. Run AnalysisEngine to filter and score.
+     * 5. Return Top 30.
      */
     scanMarket: async (): Promise<AnalysisResult[]> => {
-        console.log('Fetching latest market snapshot from TWSE/TPEx...');
-        let latestData: StockData[] = [];
+        console.log('Starting Enhanced Market Scan...');
 
+        // 1. Fetch Latest Market Data (Day 0)
+        let latestData: StockData[] = [];
         try {
             latestData = await ExchangeClient.getAllMarketQuotes();
         } catch (e: any) {
@@ -21,51 +25,104 @@ export const ScannerService = {
             throw new Error(`Market data unavailable: ${e.message}`);
         }
 
-        if (latestData.length === 0) {
-            throw new Error(`Market data not found. Please check internet connection.`);
+        if (latestData.length === 0) throw new Error(`Market data not found.`);
+
+        // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)
+        // Also ensure Close > Open (Red Candle) and Price > 10 (avoid penny stocks if needed, optional)
+        console.log('Filtering Top 100 Candidates...');
+        const candidates = latestData
+            .filter(s => s.Trading_Volume > 2000 && s.close > s.open)
+            .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
+            .slice(0, 100);
+
+        const candidateIds = new Set(candidates.map(c => c.stock_id));
+        console.log(`Candidates identified: ${candidates.length}`);
+
+        // 3. Build History (Last 10 Days)
+        // We have Day 0. Need Day -1 to -9.
+        const historyMap = new Map<string, StockData[]>();
+
+        // Initialize with Day 0
+        candidates.forEach(c => {
+            historyMap.set(c.stock_id, [c]);
+        });
+
+        // Fetch past dates
+        // Note: This involves serialized requests or parallel. Parallel limit 3-5 to be nice.
+        const pastDates: string[] = [];
+        let d = new Date();
+        let daysFound = 0;
+        let lookback = 1;
+
+        while (daysFound < 9 && lookback < 20) { // Try up to 20 days back to find 9 trading days
+            const targetDate = subDays(d, lookback);
+            if (!isWeekend(targetDate)) {
+                pastDates.push(format(targetDate, 'yyyyMMdd'));
+                daysFound++;
+            }
+            lookback++;
         }
 
-        // Broad Filter: Volume > 2000 and Price > Open (Bullish Candle)
-        console.log('Filtering candidates...');
-        const candidates = latestData.filter(s => s.Trading_Volume > 2000 && s.close > s.open);
+        console.log(`Fetching history for dates: ${pastDates.join(', ')}`);
 
-        // Sorting: Volume (Liquidity)
-        // Take top 50 candidates for the dashboard list
-        const topCandidates = candidates
-            .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-            .slice(0, 50);
+        // Helper to fetch and merge
+        const fetchAndMerge = async (dateStr: string) => {
+            try {
+                // We fetch ALL market for that day, but only keep what matches our candidates
+                const dailyMarket = await ExchangeClient.getAllMarketQuotes(dateStr);
 
-        console.log(`Identified ${topCandidates.length} candidates for dashboard.`);
+                dailyMarket.forEach(stock => {
+                    if (candidateIds.has(stock.stock_id)) {
+                        const list = historyMap.get(stock.stock_id);
+                        if (list) list.push(stock);
+                    }
+                });
+            } catch (e) {
+                console.warn(`Failed to fetch history for ${dateStr}`);
+            }
+        };
 
-        // Map to simplified AnalysisResult (without detailed scoring initially)
-        return topCandidates.map(s => {
-            // Calculate approximate change percentage
-            // ExchangeClient logic: spread is price difference. 
-            // If up, spread is positive. If down, negative.
-            // We only filtered close > open, so spread should be positive or close > prev.
-            const prev = s.close - s.spread;
-            const changePercent = prev !== 0 ? (s.spread / prev) * 100 : 0;
+        // Run in batches of 3 to avoid overwhelming
+        for (let i = 0; i < pastDates.length; i += 3) {
+            const batch = pastDates.slice(i, i + 3);
+            await Promise.all(batch.map(date => fetchAndMerge(date)));
+        }
 
-            return {
-                stock_id: s.stock_id,
-                stock_name: s.stock_name,
-                close: s.close,
-                change_percent: changePercent,
-                score: 0, // Pending analysis
-                v_ratio: 0,
-                is_ma_aligned: false,
-                is_ma_breakout: false,
-                consecutive_buy: 0,
-                tags: [],
-                poc: 0,
-                verdict: 'Pending Analysis'
-            };
+        // 4. Scoring & Filtering
+        let scoredCandidates: AnalysisResult[] = [];
+
+        candidates.forEach(c => {
+            // Sort history ascending (oldest first)
+            const hist = historyMap.get(c.stock_id) || [];
+            hist.sort((a, b) => a.date.localeCompare(b.date));
+
+            // Run Engine
+            // Note: We don't have Institutional data here (only Day 0 snapshot doesn't usually have it, 
+            // or we'd need another API). For Stage 1, we might skip detailed chip analysis 
+            // or assume neutral if missing.
+            // *Wait*, ExchangeClient data doesn't include Inst data. 
+            // We pass empty insts or try to inference from 'spread'? No.
+            // We will proceed without Inst data for Stage 1. 
+            // The Engine gracefully handles missing chips (neutral score).
+
+            const result = evaluateStock(c.stock_id, { prices: hist, insts: [] });
+
+            if (result && result.score >= 0.3) { // Min score filter
+                scoredCandidates.push(result);
+            }
         });
+
+        // 5. Final Top 30 Ranking
+        scoredCandidates.sort((a, b) => b.score - a.score);
+        const top30 = scoredCandidates.slice(0, 30);
+
+        console.log(`Final Selection: ${top30.length} stocks.`);
+        return top30;
     },
 
     /**
      * Stage 2: Deep Analysis (On-Demand)
-     * Performs full technical analysis for a single stock using FinMind.
+     * Performs full technical analysis for a single stock using FinMind (Detailed).
      */
     analyzeStock: async (stockId: string): Promise<AnalysisResult | null> => {
         console.log(`Analyzing stock ${stockId}...`);
@@ -94,8 +151,8 @@ export const ScannerService = {
                 }
             }
 
-            if (prices.length < 10) {
-                console.warn(`Insufficient data for ${stockId} (found ${prices.length} days)`);
+            if (prices.length < 5) {
+                console.warn(`Insufficient data for ${stockId}`);
                 return null;
             }
 
