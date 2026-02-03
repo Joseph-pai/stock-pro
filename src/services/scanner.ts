@@ -21,6 +21,7 @@ export const ScannerService = {
         let effectiveDate = new Date();
         let attempts = 0;
         let found = false;
+        let lastError = '';
 
         // Try up to 5 days back to find the latest trading day
         while (!found && attempts < 5) {
@@ -29,13 +30,17 @@ export const ScannerService = {
                 try {
                     console.log(`Attempting to fetch market data for ${dateStr}...`);
                     latestData = await ExchangeClient.getAllMarketQuotes(dateStr);
-                    if (latestData && latestData.length > 0) {
+
+                    if (latestData && latestData.length > 50) { // Safety check: must have enough data
                         found = true;
-                        console.log(`Successfully fetched data for ${dateStr}`);
+                        console.log(`Successfully fetched data for ${dateStr} (${latestData.length} records)`);
                         break;
+                    } else {
+                        lastError = `Empty data received for ${dateStr}`;
                     }
                 } catch (e: any) {
                     console.warn(`Fetch failed for ${dateStr}: ${e.message}`);
+                    lastError = `${e.message} (Date: ${dateStr})`;
                 }
             }
 
@@ -46,7 +51,7 @@ export const ScannerService = {
         }
 
         if (!found || latestData.length === 0) {
-            throw new Error(`Market data not found after ${attempts} attempts. Please check internet or Exchange status.`);
+            throw new Error(`Market scan failed. Last error: ${lastError || 'Unknown'}. (Tried 5 days)`);
         }
 
         // 2. Initial Filter: Top 100 by Volume (Liquidity & Hotness)
