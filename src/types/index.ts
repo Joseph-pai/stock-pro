@@ -45,7 +45,7 @@ export interface AnalysisResult {
     verdict: string;           // Human readable analysis (e.g. "Bullish Breakout")
 
     // Flags
-    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN' | 'VOLUME_INCREASING' | 'DISCOVERY' | 'RED_K')[];
+    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN' | 'VOLUME_INCREASING' | 'DISCOVERY' | 'RED_K' | 'BASIC_SUPPORT')[];
 
     // Detailed History (Optional, for Charting)
     history?: StockData[];

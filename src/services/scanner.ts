@@ -331,7 +331,7 @@ export const ScannerService = {
             const totalPoints = volumeScore + maScore + chipScore + revenueBonusPoints;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
-            const tags = ['DISCOVERY'];
+            const tags: AnalysisResult['tags'] = ['DISCOVERY'];
             if (result.isBreakout) tags.push('BREAKOUT');
             if (result.maData.isSqueezing) tags.push('MA_SQUEEZE');
             if ((result.vRatio || 0) >= 3) tags.push('VOLUME_EXPLOSION');

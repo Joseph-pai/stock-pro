@@ -109,7 +109,7 @@ export async function POST(req: Request) {
                 const totalPoints = volumeScore + maScore + chipScore + (typeof revenueBonusPoints === 'number' ? revenueBonusPoints : 0);
                 const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
-                const tags = ['DISCOVERY'];
+                const tags: typeof result['tags'] = ['DISCOVERY'];
                 if (evalData?.isBreakout) tags.push('BREAKOUT');
                 if (evalData?.maData?.isSqueezing) tags.push('MA_SQUEEZE');
                 if ((evalData?.vRatio || 0) >= 3) tags.push('VOLUME_EXPLOSION');
