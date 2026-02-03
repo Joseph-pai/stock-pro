@@ -249,37 +249,43 @@ export default function StockDetailPage() {
                     "flex-1 flex flex-col",
                     isLandscape ? "w-full h-full overflow-y-auto" : ""
                 )}>
-                    {/* Chart Section with Toggle - Sticky Header */}
-                    <div className="px-6 py-4 flex items-center justify-between sticky top-0 bg-slate-950/95 backdrop-blur-xl z-[60] border-b border-white/5 shadow-2xl">
-                        <h3 className="text-lg font-black text-slate-300 flex items-center gap-2">
-                            <LineChart className="w-5 h-5 text-blue-400" />
-                            技術走勢圖及共振指標分析
-                        </h3>
+                    {/* Chart Section with Toggle - Cleaned up to ensure clickability */}
+                    <div className="px-6 py-6 flex items-center justify-between border-b border-white/5 bg-slate-900/40 relative z-30">
+                        <div className="flex flex-col">
+                            <h3 className="text-lg font-black text-slate-300 flex items-center gap-2">
+                                <LineChart className="w-5 h-5 text-blue-400" />
+                                技術走勢圖及共振指標
+                            </h3>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter mt-1">TradingView Advanced Chart Engine</p>
+                        </div>
                         <button
                             type="button"
-                            onClick={() => setShowChart(prev => !prev)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowChart(prev => !prev);
+                            }}
                             className={clsx(
-                                "px-4 py-2 rounded-xl border-2 transition-all flex items-center gap-3 active:scale-95 shadow-lg cursor-pointer select-none",
+                                "px-5 py-2.5 rounded-2xl border-2 transition-all flex items-center gap-3 active:scale-90 select-none cursor-pointer",
                                 showChart
-                                    ? "bg-blue-600/20 border-blue-500/50 text-blue-400"
-                                    : "bg-slate-800 border-white/20 text-slate-400"
+                                    ? "bg-blue-600/20 border-blue-500/50 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.2)]"
+                                    : "bg-slate-800 border-white/10 text-slate-500"
                             )}
                         >
                             <span className={clsx(
-                                "w-2.5 h-2.5 rounded-full shadow-lg",
-                                showChart ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-600"
+                                "w-2.5 h-2.5 rounded-full",
+                                showChart ? "bg-emerald-500 shadow-[0_0_10px_#10b981]" : "bg-slate-600"
                             )}></span>
-                            <span className="text-sm font-black tracking-tight whitespace-nowrap">
-                                {showChart ? '按此隱藏 K 線圖' : '按此顯示 K 線圖'}
+                            <span className="text-sm font-black tracking-tight">
+                                {showChart ? '隱藏 K 線' : '顯示 K 線'}
                             </span>
                         </button>
                     </div>
 
                     {/* The Chart - Responsive Container with Show/Hide */}
                     {showChart && (
-                        <div key="tradingview-chart-wrapper" className={clsx(
+                        <div key={`chart-${symbol}`} className={clsx(
                             "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
-                            isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6"
+                            isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6 mt-4"
                         )}>
                             <TradingViewChart
                                 data={candles}
@@ -288,14 +294,13 @@ export default function StockDetailPage() {
                                 ma20={ma20}
                                 poc={data.poc}
                             />
-
                             {/* Legend Overlay */}
                             <div className="absolute top-4 left-6 pointer-events-none space-y-2">
                                 <div className="flex items-center gap-4 bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                                    <LegendItem color="bg-amber-500" label="MA5 (5日均線)" />
-                                    <LegendItem color="bg-blue-500" label="MA10 (10日均線)" />
-                                    <LegendItem color="bg-purple-500" label="MA20 (20日均線)" />
-                                    <LegendItem color="bg-yellow-400" label="POC (支撐價)" border="border-dashed" />
+                                    <LegendItem color="bg-amber-500" label="MA5" />
+                                    <LegendItem color="bg-blue-500" label="MA10" />
+                                    <LegendItem color="bg-purple-500" label="MA20" />
+                                    <LegendItem color="bg-yellow-400" label="POC" border="border-dashed" />
                                 </div>
                             </div>
                         </div>
@@ -528,13 +533,13 @@ export default function StockDetailPage() {
                                     </div>
                                     <h3 className="text-2xl font-black">AI 專家多維判斷結論</h3>
                                 </div>
-                                <p className="text-2xl font-black text-slate-200 leading-relaxed tracking-tight">
-                                    「根據深度量能探測，<span className="text-blue-400">{data.stock_name}</span> 目前正處於典型的【全信號共振】噴發前兆。量能倍增 {data.v_ratio.toFixed(1)}x 伴隨均線極致壓縮，顯示主力吸籌已臻完成，市場共謀度極高。建議密切關注開盤表現，只要站穩 5MA，主升段行情爆發概率大增。」
+                                <p className="text-2xl font-black text-slate-200 leading-relaxed tracking-tight prose prose-invert max-w-none">
+                                    {generateAIConclusion(data)}
                                 </p>
                                 <div className="mt-8 flex flex-wrap gap-4">
-                                    <VerdictTag label="建議投資" color="blue" />
-                                    <VerdictTag label="極高共振勝率" color="emerald" />
-                                    <VerdictTag label="量價完美耦合" color="blue" />
+                                    <VerdictTag label={data.score >= 0.7 ? "建議加倉" : "建議觀望"} color={data.score >= 0.7 ? "blue" : "blue"} />
+                                    <VerdictTag label={data.v_ratio >= 3 ? "量能爆發" : "量能平穩"} color="emerald" />
+                                    <VerdictTag label={data.is_ma_aligned ? "均線糾結" : "多頭排列"} color="blue" />
                                 </div>
                             </div>
                         </div>
@@ -641,10 +646,22 @@ function calculateKellyAction(score: number): string {
 }
 
 function calculateKellyPercentage(score: number): number {
-    // Kelly formula: f = (b*p - q) / b
-    // Simplified: use score as win probability (p)
-    // Assume 1:1 reward:risk (b = 1)
-    // f = 2*p - 1
     const percentage = Math.max(0, Math.min(100, (score * 2 - 1) * 100));
     return Math.round(percentage);
+}
+
+// AI Conclusion Generator - Dynamic results based on stock data
+function generateAIConclusion(data: AnalysisResult): string {
+    const { stock_name, score, v_ratio, is_ma_aligned, is_ma_breakout } = data;
+
+    // Determine tone based on score
+    if (score >= 0.8) {
+        return `根據深度量能探測，${stock_name} 目前正處於典型的【全信號共振】噴發前兆。量能倍增 ${v_ratio.toFixed(1)}x 伴隨均線極致壓縮，顯示主力吸籌已臻完成，市場共謀度極高。建議密切關注開盤表現，只要站穩 5MA，主升段行情爆發概率大增。`;
+    } else if (score >= 0.65) {
+        return `${stock_name} 當前展現出穩健的技術面修復跡象。V-Ratio 為 ${v_ratio.toFixed(1)}x，雖未達極端放量，但均線排列已趨向多頭${is_ma_aligned ? '（高度糾結壓縮）' : ''}。目前屬於機構震盪洗籌階段，適合分批佈局。若突破前高壓力位，後市動能將進一步釋放。`;
+    } else if (score >= 0.45) {
+        return `目前 ${stock_name} 處於多空拉鋸的橫盤整理區間。量能比 ${v_ratio.toFixed(1)}x 顯示市場參與度尚在溫和回升，但明確的共振信號尚未完全閉合。此時建議以觀望為主，等待 ${is_ma_breakout ? '突破確認' : '均線進一步靠攏'} 後再行介入，避免在震盪中磨損資金。`;
+    } else {
+        return `${stock_name} 目前技術形態偏弱，量能萎縮且未見明顯支撐跡象。得分僅為 ${Math.round(score * 100)}，暗示主力資金目前並無拉升意願。建議嚴格遵守風險管理體系，暫時避開或降低持倉，直至量價配合出現底部分型共振信號。`;
+    }
 }
