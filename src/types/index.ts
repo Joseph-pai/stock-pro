@@ -45,7 +45,7 @@ export interface AnalysisResult {
     verdict: string;           // Human readable analysis (e.g. "Bullish Breakout")
 
     // Flags
-    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN')[];
+    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN' | 'VOLUME_INCREASING' | 'DISCOVERY' | 'RED_K')[];
 
     // Detailed History (Optional, for Charting)
     history?: StockData[];
@@ -71,6 +71,9 @@ export interface AnalysisResult {
         chips: string;
         fundamental: string;
     };
+    // 專業分析數據
+    maConstrictValue?: number;   // 均線糾結度 (0-1)
+    volumeIncreasing?: boolean;  // 成交量連續遞增
 }
 
 export interface StockCandle {

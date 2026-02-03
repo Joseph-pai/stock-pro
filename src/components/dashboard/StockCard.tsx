@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalysisResult } from '@/types';
-import { Activity, Zap, ShieldCheck } from 'lucide-react';
+import { Activity, Zap, ShieldCheck, TrendingUp, Flame } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -18,6 +18,13 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
     const isPositive = data.change_percent >= 0;
     const volTrend = data.dailyVolumeTrend || [];
     const maxVol = Math.max(...volTrend, 1);
+
+    // 判斷爆發信號
+    const hasVolumeExplosion = data.tags.includes('VOLUME_EXPLOSION');
+    const hasMaSqueeze = data.tags.includes('MA_SQUEEZE');
+    const hasBreakout = data.tags.includes('BREAKOUT');
+    const hasInstBuying = data.tags.includes('INST_BUYING');
+    const hasVolumeIncreasing = data.tags.includes('VOLUME_INCREASING');
 
     return (
         <div
@@ -38,9 +45,35 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                         </h3>
                         <div className="flex items-center gap-2 mt-1">
                             <p className="text-sm text-gray-500 font-mono font-bold tracking-widest">{data.stock_id}</p>
-                            {data.consecutive_buy > 0 && (
-                                <span className="flex items-center text-xs font-black bg-rose-500/10 text-rose-400 px-2 py-1 rounded-full border border-rose-500/20 uppercase tracking-tighter">
-                                    投信主力進場
+                        </div>
+
+                        {/* 爆發信號標籤 */}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {hasVolumeExplosion && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                    <Flame className="w-3 h-3" />
+                                    量能激增 {data.v_ratio.toFixed(1)}x
+                                </span>
+                            )}
+                            {hasMaSqueeze && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
+                                    📉 均線糾結 {data.maConstrictValue ? (data.maConstrictValue * 100).toFixed(1) : ''}%
+                                </span>
+                            )}
+                            {hasBreakout && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                    <TrendingUp className="w-3 h-3" />
+                                    突破確認
+                                </span>
+                            )}
+                            {hasInstBuying && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full border border-rose-500/20">
+                                    💰 投信連買
+                                </span>
+                            )}
+                            {hasVolumeIncreasing && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
+                                    📊 量能遞增
                                 </span>
                             )}
                         </div>
@@ -72,10 +105,10 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                     <div className="flex items-center gap-2">
                         <Zap className={cn("w-4 h-4", data.score > 0 ? "text-amber-400 fill-amber-400" : "text-slate-700")} />
                         <span className={cn("text-xl font-black italic font-mono", data.score > 0 ? "text-white" : "text-slate-600")}>
-                            {data.score > 0 ? data.score.toFixed(1) : '---'}
+                            {data.score > 0 ? (data.score * 100).toFixed(0) : '---'}
                         </span>
                     </div>
-                    <span className="text-[10px] text-slate-600 mt-1">0-1 分制</span>
+                    <span className="text-[10px] text-slate-600 mt-1">0-100 分制</span>
                 </div>
 
                 <div className="flex flex-col">
@@ -94,7 +127,7 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                     <div className="flex items-center gap-2">
                         <ShieldCheck className={cn("w-4 h-4", data.consecutive_buy > 0 ? "text-rose-400" : "text-slate-700")} />
                         <span className={cn("text-xs font-black uppercase tracking-tighter truncate", data.consecutive_buy > 0 ? "text-rose-300" : "text-slate-600")}>
-                            {data.consecutive_buy > 0 ? '連續買超' : '待深度掃描'}
+                            {data.consecutive_buy > 0 ? `${data.consecutive_buy}日連買` : '待深度掃描'}
                         </span>
                     </div>
                     <span className="text-[10px] text-slate-600 mt-1">投信動向</span>
