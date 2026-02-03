@@ -469,7 +469,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {filteredResults.map((stock, index) => (
-              <div key={stock.stock_id} onClick={() => router.push(`/chart/${stock.stock_id}`)}>
+              <div key={stock.stock_id} onClick={() => router.push(`/stock/${stock.stock_id}`)}>
                 <StockCard data={stock} index={index + 1} />
               </div>
             ))}
