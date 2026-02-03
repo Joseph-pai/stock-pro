@@ -248,10 +248,10 @@ export default function ChartPage() {
                     "flex-1 flex flex-col",
                     isLandscape ? "w-full h-full" : ""
                 )}>
-                    {/* The Chart - Larger & Polished */}
+                    {/* The Chart - Responsive Container */}
                     <div className={clsx(
-                        "relative bg-slate-900/30",
-                        isLandscape ? "h-full w-full" : "h-[450px] border-y border-white/5"
+                        "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
+                        isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5"
                     )}>
                         <TradingViewChart
                             data={candles}

@@ -22,7 +22,11 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
-        const chart = createChart(chartContainerRef.current, {
+        const container = chartContainerRef.current;
+        const width = container.clientWidth;
+        const height = container.clientHeight || 450;
+
+        const chart = createChart(container, {
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
                 textColor: '#64748b',
@@ -38,8 +42,8 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
                 vertLine: { color: '#3b82f6', width: 1, style: 2, labelBackgroundColor: '#1e40af' },
                 horzLine: { color: '#3b82f6', width: 1, style: 2, labelBackgroundColor: '#1e40af' },
             },
-            width: chartContainerRef.current.clientWidth,
-            height: chartContainerRef.current.clientHeight || 500,
+            width,
+            height,
             timeScale: {
                 borderColor: 'rgba(255, 255, 255, 0.05)',
                 timeVisible: true,
@@ -115,14 +119,22 @@ export const TradingViewChart: React.FC<ChartProps> = ({ data, ma5, ma10, ma20, 
 
         const handleResize = () => {
             if (chartContainerRef.current) {
-                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+                const newWidth = chartContainerRef.current.clientWidth;
+                const newHeight = chartContainerRef.current.clientHeight;
+                if (newWidth > 0 && newHeight > 0) {
+                    chart.applyOptions({ width: newWidth, height: newHeight });
+                }
             }
         };
 
+        // Use ResizeObserver for more reliable resize detection
+        const resizeObserver = new ResizeObserver(() => handleResize());
+        resizeObserver.observe(chartContainerRef.current);
         window.addEventListener('resize', handleResize);
 
         return () => {
             window.removeEventListener('resize', handleResize);
+            resizeObserver.disconnect();
             chart.remove();
         };
     }, [data, ma5, ma10, ma20, poc]);
