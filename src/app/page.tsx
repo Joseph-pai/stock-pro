@@ -3,9 +3,10 @@
 import { StockCard } from '@/components/dashboard/StockCard';
 import { AnalysisResult, StockData } from '@/types';
 import { SECTORS, MarketType, MARKET_NAMES } from '@/lib/sectors';
-import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3 } from 'lucide-react';
+import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
+import Link from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
 
 type ScanStage = 'idle' | 'fetching' | 'filtering' | 'analyzing' | 'complete';
@@ -19,10 +20,11 @@ interface ScanSettings {
 const DEFAULT_SETTINGS: ScanSettings = {
   volumeRatio: 2.0,
   maConstrict: 2.0,
-  breakoutPercent: 3.0 // Default 3% as requested
+  breakoutPercent: 3.0
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [stage, setStage] = useState<ScanStage>('idle');
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,6 +44,10 @@ export default function DashboardPage() {
     setSector(market === 'TWSE' ? 'ALL' : 'AL');
   }, [market]);
 
+  const currentSectorName = useMemo(() => {
+    return SECTORS[market].find(s => s.id === sector)?.name || '該類股';
+  }, [market, sector]);
+
   const runScan = async () => {
     setStage('fetching');
     setHasScanned(false);
@@ -50,9 +56,8 @@ export default function DashboardPage() {
     const t0 = Date.now();
 
     try {
-      // Phase 1: Directed Fetch (No more full market snapshot if sector is selected)
-      const sectorName = SECTORS[market].find(s => s.id === sector)?.name || '該類股';
-      setProgress({ current: 0, total: 0, phase: `正在獲取 ${MARKET_NAMES[market]} - ${sectorName} 數據...` });
+      // Phase 1: Directed Fetch
+      setProgress({ current: 0, total: 0, phase: `正在獲取 ${MARKET_NAMES[market]} - ${currentSectorName} 數據...` });
 
       const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}`);
       const snapshotJson = await snapshotRes.json();
@@ -72,16 +77,16 @@ export default function DashboardPage() {
       const candidates = snapshot
         .filter(s => {
           const isRedK = s.close >= s.open;
-          const isVolActive = s.Trading_Volume >= 1.0; // 至少 1000 股
-          const isStrong = (s.close - s.open) / s.open >= 0.005; // 至少漲 0.5% 才進入深度分析
-          return isRedK && isVolActive && isStrong;
+          const isVolActive = s.Trading_Volume >= 1.0;
+          // Broaden search for deep analysis
+          return isRedK && isVolActive;
         })
         .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-        .slice(0, 100); // Take top 100 for deep resonance check
+        .slice(0, 150); // Increased batch size for better coverage
 
-      // Phase 3: Batched Resonance Analysis (VolumeExplosion + MaSqueeze + Breakout)
+      // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
-      const BATCH_SIZE = 12;
+      const BATCH_SIZE = 15;
       const allResults: AnalysisResult[] = [];
       const t2_start = Date.now();
 
@@ -97,14 +102,19 @@ export default function DashboardPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            stockIds: batch.map(c => c.stock_id),
+            stocks: batch.map(c => ({ id: c.stock_id, name: c.stock_name })),
             settings: settings
           })
         });
 
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
-          allResults.push(...batchJson.data);
+          // Inject current sector name into results
+          const augmented = batchJson.data.map((r: any) => ({
+            ...r,
+            sector_name: currentSectorName === '全部類股' ? '主板' : currentSectorName
+          }));
+          allResults.push(...augmented);
         }
       }
 
@@ -143,7 +153,7 @@ export default function DashboardPage() {
         <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-blue-500/10 border-2 border-blue-500/30 mb-8 shadow-lg shadow-blue-500/10">
           <Sparkles className="w-6 h-6 text-blue-400" />
           <span className="text-lg font-black text-blue-400 uppercase tracking-widest">
-            {results.length > 0 ? `發現 ${results.length} 支全信號共振股` : '定向定向掃描系統 v2.0'}
+            {results.length > 0 ? `發現 ${results.length} 支全信號共振股` : '定向定點掃描系統 v2.1'}
           </span>
         </div>
         <h1 className="text-6xl md:text-7xl font-black bg-gradient-to-br from-white via-white to-blue-500 bg-clip-text text-transparent mb-8 tracking-tighter">
@@ -172,7 +182,7 @@ export default function DashboardPage() {
                 <option value="TWSE">{MARKET_NAMES.TWSE}</option>
                 <option value="TPEX">{MARKET_NAMES.TPEX}</option>
               </select>
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-xl">▼</div>
             </div>
           </div>
 
@@ -191,7 +201,7 @@ export default function DashboardPage() {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-xl">▼</div>
             </div>
           </div>
         </div>
@@ -211,12 +221,15 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-10">
+          <div className="grid grid-cols-1 gap-12">
             {/* 1. Volume */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-black text-slate-400">❶ 量能激增倍數 (V-Ratio)</span>
-                <span className="text-3xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
+                <div className="flex flex-col">
+                  <span className="text-lg font-black text-slate-300">❶ 量能激增倍數 (V-Ratio)</span>
+                  <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
+                </div>
+                <span className="text-4xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
               </div>
               <input
                 type="range" min="1.0" max="6.0" step="0.5"
@@ -227,10 +240,13 @@ export default function DashboardPage() {
             </div>
 
             {/* 2. Squeeze */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-black text-slate-400">❷ 均線糾結度 (MA Gap)</span>
-                <span className="text-3xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
+                <div className="flex flex-col">
+                  <span className="text-lg font-black text-slate-300">❷ 均線糾結度 (MA Gap)</span>
+                  <span className="text-xs font-bold text-slate-500">▶ % 越低代表壓縮越緊，條件越 [極度嚴苛]</span>
+                </div>
+                <span className="text-4xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
               </div>
               <input
                 type="range" min="0.5" max="5.0" step="0.5"
@@ -241,10 +257,13 @@ export default function DashboardPage() {
             </div>
 
             {/* 3. Breakout */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-black text-slate-400">❸ 指標突破幅度 (漲幅)</span>
-                <span className="text-3xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
+                <div className="flex flex-col">
+                  <span className="text-lg font-black text-slate-300">❸ 指標突破幅度 (今日漲幅)</span>
+                  <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
+                </div>
+                <span className="text-4xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
               </div>
               <input
                 type="range" min="1.0" max="8.0" step="0.5"
@@ -269,9 +288,9 @@ export default function DashboardPage() {
         )}
       >
         {isWorking ? <Loader2 className="w-12 h-12 animate-spin mb-3" /> : <Flame className="w-12 h-12 mb-3 group-hover:scale-125 transition-transform" />}
-        <span className="text-3xl font-black uppercase tracking-widest">啟動三大共振定點掃描</span>
+        <span className="text-3xl font-black uppercase tracking-widest">啟動定點共振掃描</span>
         <span className="text-lg font-bold text-white/60 mt-3">
-          已鎖定：{MARKET_NAMES[market]}
+          已鎖定目標：{MARKET_NAMES[market]} - {currentSectorName}
         </span>
       </button>
 
@@ -288,7 +307,7 @@ export default function DashboardPage() {
                 {Math.round((progress.current / progress.total) * 100 || 0)}%
               </span>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-6 overflow-hidden border-2 border-white/5">
+            <div className="w-full bg-slate-800 rounded-full h-8 overflow-hidden border-2 border-white/5">
               <div
                 className="h-full bg-gradient-to-r from-blue-600 via-purple-600 to-amber-500 transition-all duration-500 ease-out"
                 style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '15%' }}
@@ -304,7 +323,7 @@ export default function DashboardPage() {
             placeholder="輸入股票代碼或名稱快速查找..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900 border-4 border-slate-800 rounded-[2.5rem] py-7 pl-20 pr-10 text-2xl font-black focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 text-white"
+            className="w-full bg-slate-900 border-4 border-slate-800 rounded-[2.5rem] py-8 pl-20 pr-10 text-3xl font-black focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 text-white"
           />
         </div>
       </div>
@@ -325,28 +344,32 @@ export default function DashboardPage() {
             <p className="text-slate-600 text-xl font-black mt-4">請選定目標後按下啟動鈕</p>
           </div>
         ) : filteredResults.length === 0 && hasScanned && !isWorking ? (
-          <div className="py-40 text-center border-4 border-dashed border-rose-900/30 rounded-[4rem] bg-rose-500/5">
+          <div className="py-40 text-center border-4 border-dashed border-rose-900/30 rounded-[4rem] bg-rose-500/5 px-10">
             <div className="text-9xl mb-10">🔍</div>
-            <p className="text-rose-400 font-black text-5xl mb-6">沒有符合的高共振股票</p>
-            <div className="max-w-md mx-auto space-y-4">
-              <p className="text-slate-500 text-2xl font-black">
-                已分析 {timing?.totalStocks} 支股票，但在目前參數下未發現完美共振標的。
+            <p className="text-rose-400 font-black text-5xl mb-6 leading-tight">未發現符合標的</p>
+            <div className="max-w-md mx-auto space-y-6">
+              <p className="text-slate-500 text-2xl font-black leading-relaxed">
+                已深度分析 {timing?.totalStocks} 支股票，但在目前配置下未發現「完美共振」。
               </p>
-              <div className="p-6 bg-blue-500/10 rounded-3xl border border-blue-500/20 mt-8">
-                <p className="text-blue-400 text-lg font-black">
-                  💡 策略建議：<br />
-                  1. 調低「量能激增倍數」至 1.5x<br />
-                  2. 放寬「均線糾結度」至 3.0%
-                </p>
+              <div className="p-8 bg-blue-500/10 rounded-[2rem] border-2 border-blue-500/20 mt-8 text-left">
+                <div className="flex items-center gap-3 mb-4">
+                  <Info className="w-6 h-6 text-blue-400" />
+                  <p className="text-blue-400 text-xl font-black">為什麼找不到？</p>
+                </div>
+                <ul className="text-slate-400 text-lg font-bold space-y-4">
+                  <li>1. **均線糾結度**：若設為 0.5%，代表均線必須極度重疊，這非常罕見。</li>
+                  <li>2. **共振條件**：當前市場可能並無同時符合「爆量」且「糾結」的股票。</li>
+                  <li className="text-blue-400 font-black mt-4">👉 建議：將「均線糾結度」調升至 3.0%~4.0% 試試看。</li>
+                </ul>
               </div>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {filteredResults.map((stock, index) => (
-              <Link key={stock.stock_id} href={`/chart/${stock.stock_id}`}>
+              <div key={stock.stock_id} onClick={() => router.push(`/chart/${stock.stock_id}`)}>
                 <StockCard data={stock} index={index + 1} />
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -363,7 +386,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4 py-4 px-8 bg-blue-500/5 rounded-full border border-blue-500/10">
             <Sparkles className="w-5 h-5 text-blue-500" />
             <p className="text-slate-500 text-sm font-black tracking-widest uppercase">
-              Antigravity Resonance Engine v8.0 | {new Date().toLocaleDateString()}
+              Antigravity Resonance Engine v8.2 | {new Date().toLocaleDateString()}
             </p>
           </div>
         </footer>

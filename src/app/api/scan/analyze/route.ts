@@ -8,20 +8,20 @@ export const revalidate = 0;
 
 export async function POST(req: Request) {
     try {
-        const { stockIds, settings } = await req.json();
+        const { stocks, settings } = await req.json(); // stocks: { id, name }[]
 
-        if (!Array.isArray(stockIds) || stockIds.length === 0) {
+        if (!Array.isArray(stocks) || stocks.length === 0) {
             return NextResponse.json({ success: false, error: 'Empty stock list' }, { status: 400 });
         }
 
-        console.log(`[Deep Analysis] Batch of ${stockIds.length} stocks. Settings:`, settings);
+        console.log(`[Deep Analysis] Batch of ${stocks.length} stocks. Settings:`, settings);
 
         const results: AnalysisResult[] = [];
 
         // Process this batch
         const batchResults = await Promise.allSettled(
-            stockIds.map(async (stockId: string) => {
-                const history = await ExchangeClient.getStockHistory(stockId);
+            stocks.map(async (stock: { id: string, name: string }) => {
+                const history = await ExchangeClient.getStockHistory(stock.id);
                 const evalData = evaluateStock(history, settings);
 
                 if (evalData && evalData.isQualified) {
@@ -29,8 +29,9 @@ export async function POST(req: Request) {
                     const volumes = history.map(h => h.Trading_Volume);
 
                     return {
-                        stock_id: stockId,
-                        stock_name: today.stock_name || stockId,
+                        stock_id: stock.id,
+                        stock_name: stock.name || stock.id,
+
                         close: today.close,
                         change_percent: evalData.changePercent,
                         score: 0,

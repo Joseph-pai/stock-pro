@@ -24,7 +24,7 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
     const maxVol = Math.max(...volTrend, 1);
 
     // Identify Resonance Signals
-    const hasVolumeExplosion = data.v_ratio >= 3.0; // Dynamic indicator from backend
+    const hasVolumeExplosion = data.v_ratio >= 3.0;
     const hasMaSqueeze = data.tags.includes('MA_SQUEEZE');
     const hasBreakout = data.tags.includes('BREAKOUT');
 
@@ -42,15 +42,23 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                         </div>
                     )}
                     <div>
-                        <h3 className="text-3xl font-black text-white group-hover:text-blue-400 transition-colors tracking-tight">
-                            {data.stock_name}
-                        </h3>
-                        <div className="flex items-center gap-3 mt-1.5">
-                            <p className="text-lg text-gray-400 font-mono font-bold tracking-widest">{data.stock_id}</p>
+                        {/* Improved Header: ID, Name, Sector */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <span className="text-3xl font-black text-blue-400 font-mono tracking-tighter tabular-nums">
+                                {data.stock_id}
+                            </span>
+                            <h3 className="text-4xl font-black text-white group-hover:text-blue-200 transition-colors tracking-tight">
+                                {data.stock_name}
+                            </h3>
+                            {data.sector_name && (
+                                <span className="text-lg font-black text-slate-500 bg-slate-800/80 px-4 py-1.5 rounded-xl border border-white/5 uppercase tracking-widest">
+                                    {data.sector_name}
+                                </span>
+                            )}
                         </div>
 
                         {/* Resonance Tags - Scaled up for readability */}
-                        <div className="flex flex-wrap gap-2 mt-4">
+                        <div className="flex flex-wrap gap-2 mt-5">
                             {hasVolumeExplosion && (
                                 <span className="flex items-center gap-1.5 text-xs font-black bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full border border-amber-500/30 font-mono">
                                     <Flame className="w-4 h-4" />
@@ -59,7 +67,7 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                             )}
                             {hasMaSqueeze && (
                                 <span className="flex items-center gap-1.5 text-xs font-black bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full border border-purple-500/30">
-                                    📉 糾結 {(data.maConstrictValue! * 100).toFixed(1)}%
+                                    📉 均線糾結 {(data.maConstrictValue! * 100).toFixed(1)}%
                                 </span>
                             )}
                             {hasBreakout && (

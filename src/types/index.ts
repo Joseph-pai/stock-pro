@@ -74,6 +74,7 @@ export interface AnalysisResult {
     // 專業分析數據
     maConstrictValue?: number;   // 均線糾結度 (0-1)
     volumeIncreasing?: boolean;  // 成交量連續遞增
+    sector_name?: string;      // 產業名稱
 }
 
 export interface StockCandle {
