@@ -14,22 +14,15 @@ export const ExchangeClient = {
     getQuotesBySector: async (market: 'TWSE' | 'TPEX', sectorId: string): Promise<StockData[]> => {
         try {
             if (market === 'TWSE') {
-                // MI_INDEX is reliable for sector-based quotes
                 const url = `https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&type=${sectorId}`;
                 const res = await axios.get(url, { timeout: 8000 });
                 const data = res.data;
-
-                // For MI_INDEX, the stock data is usually in 'data9' or similar depending on the type
-                // It's dynamic, so we need to find the array that looks like stock data (9+ columns)
                 const tables = Object.values(data).filter(v => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]) && v[0].length >= 10);
                 if (tables.length === 0) return [];
-
                 const stocks = tables[0] as string[][];
-
                 const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
-
                 return stocks
-                    .filter(row => row[0].length === 4) // Only 4-digit stock IDs
+                    .filter(row => row[0].length === 4)
                     .map(row => ({
                         stock_id: row[0],
                         stock_name: row[1].trim(),
@@ -39,20 +32,16 @@ export const ExchangeClient = {
                         min: parseNum(row[7]),
                         close: parseNum(row[8]),
                         spread: parseNum(row[10]),
-                        Trading_Volume: parseNum(row[2]) / 1000, // Shares to K-shares or similar
+                        Trading_Volume: parseNum(row[2]) / 1000,
                         Trading_money: parseNum(row[4]),
                         Trading_turnover: parseNum(row[3]),
                     }))
                     .filter(s => s.close > 0);
             } else {
-                // TPEX Sector Quotes
-                // Note: 'AL' is all TPEX
                 const url = `https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no14/stk_orderby_result.php?l=zh-tw&se=${sectorId}`;
                 const res = await axios.get(url, { timeout: 8000 });
                 const data = res.data.aaData || [];
-
                 const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
-
                 return data
                     .filter((row: any) => row[0].length === 4)
                     .map((row: any) => ({
@@ -76,9 +65,6 @@ export const ExchangeClient = {
         }
     },
 
-    /**
-     * Legacy support for full market (used if sector is "ALL" or "AL")
-     */
     getAllMarketQuotes: async (market: 'TWSE' | 'TPEX'): Promise<StockData[]> => {
         if (market === 'TWSE') {
             const url = `https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL`;
@@ -113,20 +99,15 @@ export const ExchangeClient = {
         }
     },
 
-    /**
-     * Robust History (stays the same, used for Phase 3 deep analysis)
-     */
     getStockHistory: async (stockId: string): Promise<StockData[]> => {
         try {
             const now = new Date();
             const startDate = format(subDays(now, 70), 'yyyyMMdd');
             const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${startDate}&stockNo=${stockId}`;
-
             const res = await axios.get(url, { timeout: 10000 });
             if (!res.data || !res.data.data) return [];
             const data = res.data.data;
             const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
-
             return data.map((row: any) => ({
                 stock_id: stockId,
                 date: row[0],
@@ -138,6 +119,26 @@ export const ExchangeClient = {
             })).filter((s: any) => s.close > 0);
         } catch {
             return [];
+        }
+    },
+
+    getIndustryMapping: async (): Promise<Record<string, string>> => {
+        const mapping: Record<string, string> = {};
+        try {
+            const twseUrl = `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`;
+            const twseRes = await axios.get(twseUrl, { timeout: 10000 });
+            twseRes.data.forEach((item: any) => {
+                mapping[item.Code] = item.產業別;
+            });
+            const tpexUrl = `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_per_quotes`;
+            const tpexRes = await axios.get(tpexUrl, { timeout: 10000 });
+            tpexRes.data.forEach((item: any) => {
+                mapping[item.SecuritiesCompanyCode] = item.掛牌類別;
+            });
+            return mapping;
+        } catch (e) {
+            console.error('[Exchange] Mapping error:', e);
+            return mapping;
         }
     }
 };

@@ -35,9 +35,19 @@ export default function DashboardPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
 
-  // Market Filters
   const [market, setMarket] = useState<MarketType>('TWSE');
   const [sector, setSector] = useState<string>('ALL');
+  const [industryMap, setIndustryMap] = useState<Record<string, string>>({});
+
+  // Load industry mapping on mount
+  useEffect(() => {
+    fetch('/api/market/industry-mapping')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setIndustryMap(json.data);
+      })
+      .catch(console.error);
+  }, []);
 
   // Reset sector when market changes
   useEffect(() => {
@@ -109,10 +119,10 @@ export default function DashboardPage() {
 
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
-          // Inject current sector name into results
+          // Use real industry name from mapping or fallback
           const augmented = batchJson.data.map((r: any) => ({
             ...r,
-            sector_name: currentSectorName === '全部類股' ? '主板' : currentSectorName
+            sector_name: industryMap[r.stock_id] || (currentSectorName === '全部類股' ? '主板' : currentSectorName)
           }));
           allResults.push(...augmented);
         }
