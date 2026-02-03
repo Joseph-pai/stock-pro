@@ -2,25 +2,25 @@ import { FinMindClient } from '@/lib/finmind';
 import { ExchangeClient } from '@/lib/exchange';
 import { evaluateStock, calculateVRatio, checkMaConstrict, checkInstFlow, checkVolumeIncreasing } from './engine';
 import { AnalysisResult, StockData } from '@/types';
-import { format, subDays, isWeekend } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { calculateSMA } from './indicators';
 
 export const ScannerService = {
     /**
-     * Stage 1: Discovery (量能激增 + 均線糾結 + 突破確認)
+     * Stage 1: Discovery (三大信號共振 - 嚴格標準)
      * 
      * 篩選邏輯：
      * 1. 量能激增：V_ratio >= 3.5x
      * 2. 均線糾結：ABS(MA5 - MA20) / MA20 < 0.02
      * 3. 突破確認：收盤價突破糾結區且漲幅 > 3%
      * 
-     * 返回：前 50 名潛力股
+     * 寧缺毋濫：返回所有符合條件的股票（可能 0-15 支）
      */
     scanMarket: async (): Promise<{ results: AnalysisResult[], timing: any }> => {
         const t0 = Date.now();
-        console.log('[Scanner] Stage 1: Discovery - 量能激增+均線糾結篩選...');
+        console.log('[Scanner] Stage 1: Discovery - 三大信號共振篩選（嚴格標準）...');
 
-        // 1. 獲取市場快照
+        // 1. 獲取今日市場快照
         const snapshot = await ExchangeClient.getAllMarketQuotes();
         const t1 = Date.now();
 
@@ -30,100 +30,107 @@ export const ScannerService = {
 
         console.log(`[Scanner] Snapshot fetched: ${snapshot.length} stocks in ${t1 - t0}ms`);
 
-        // 2. 獲取歷史數據用於計算均線與量能
+        // 2. 對每支股票進行深度分析（獲取完整歷史數據）
         const candidates: AnalysisResult[] = [];
+        let processedCount = 0;
+        let errorCount = 0;
 
-        // 獲取最近 5 個交易日的日期
-        const tradingDays = [];
-        let currentDate = new Date();
-        while (tradingDays.length < 5) {
-            if (!isWeekend(currentDate)) {
-                tradingDays.push(format(currentDate, 'yyyyMMdd'));
-            }
-            currentDate = subDays(currentDate, 1);
+        // 批次處理，每次處理 50 支股票以避免過載
+        const batchSize = 50;
+        for (let i = 0; i < snapshot.length; i += batchSize) {
+            const batch = snapshot.slice(i, i + batchSize);
+
+            const batchResults = await Promise.allSettled(
+                batch.map(async (stock) => {
+                    try {
+                        // 獲取該股票的完整歷史數據（30 天）
+                        const history = await ExchangeClient.getStockHistory(stock.stock_id);
+
+                        if (history.length < 20) {
+                            return null; // 數據不足，跳過
+                        }
+
+                        // 計算真正的 MA5 和 MA20
+                        const closes = history.map(s => s.close);
+                        const ma5 = calculateSMA(closes.slice(-5), 5);
+                        const ma20 = calculateSMA(closes.slice(-20), 20);
+
+                        if (!ma5 || !ma20) return null;
+
+                        // 計算量能倍數（用完整 20 天數據）
+                        const volumes = history.map(s => s.Trading_Volume);
+                        const todayVolume = volumes[volumes.length - 1];
+                        const past20Volumes = volumes.slice(-21, -1); // 排除今天
+                        const vRatio = calculateVRatio(todayVolume, past20Volumes);
+
+                        // 檢查均線糾結
+                        const maData = checkMaConstrict(ma5, ma20);
+
+                        // 檢查突破
+                        const today = history[history.length - 1];
+                        const changePercent = (today.close - today.open) / today.open;
+                        const isBreakout = today.close > Math.max(ma5, ma20) && changePercent > 0.03;
+
+                        // 三大信號共振（嚴格標準）
+                        if (vRatio >= 3.5 && maData.isSqueezing && isBreakout) {
+                            console.log(`[Scanner] ✓ Found: ${stock.stock_id} ${stock.stock_name} - V:${vRatio.toFixed(1)}x, MA:${(maData.constrictValue * 100).toFixed(1)}%, Break:${(changePercent * 100).toFixed(1)}%`);
+
+                            const result: AnalysisResult = {
+                                stock_id: stock.stock_id,
+                                stock_name: stock.stock_name,
+                                close: today.close,
+                                change_percent: (today.close - history[history.length - 2].close) / history[history.length - 2].close,
+                                score: 0,
+                                v_ratio: parseFloat(vRatio.toFixed(2)),
+                                is_ma_aligned: maData.isSqueezing,
+                                is_ma_breakout: isBreakout,
+                                consecutive_buy: 0,
+                                poc: today.close,
+                                verdict: '三大信號共振 - 爆發前兆',
+                                tags: ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'],
+                                dailyVolumeTrend: volumes.slice(-10),
+                                maConstrictValue: maData.constrictValue,
+                                volumeIncreasing: checkVolumeIncreasing(volumes)
+                            };
+                            return result;
+                        }
+
+                        return null;
+                    } catch (error) {
+                        return null;
+                    }
+                })
+            );
+
+            // 收集成功的結果
+            batchResults.forEach(result => {
+                processedCount++;
+                if (result.status === 'fulfilled' && result.value) {
+                    candidates.push(result.value);
+                } else if (result.status === 'rejected') {
+                    errorCount++;
+                }
+            });
+
+            console.log(`[Scanner] Progress: ${processedCount}/${snapshot.length} (Found: ${candidates.length})`);
         }
-
-        // 批次獲取歷史數據（用於計算均線）
-        const historicalData = await Promise.all(
-            tradingDays.map(date => ExchangeClient.getAllMarketQuotes(date))
-        );
 
         const t2 = Date.now();
-        console.log(`[Scanner] Historical data fetched in ${t2 - t1}ms`);
 
-        // 3. 合併數據並計算指標
-        for (const stock of snapshot) {
-            try {
-                // 構建該股票的歷史價格序列
-                const stockHistory = [
-                    ...historicalData.map(dayData =>
-                        dayData.find(s => s.stock_id === stock.stock_id)
-                    ).filter(Boolean).reverse(),
-                    stock
-                ] as StockData[];
+        console.log(`[Scanner] Stage 1 完成：發現 ${candidates.length} 支符合三大信號共振的股票`);
+        console.log(`[Scanner] 處理: ${processedCount} 支, 錯誤: ${errorCount} 支`);
 
-                if (stockHistory.length < 3) continue;
-
-                // 計算量能倍數
-                const volumes = stockHistory.map(s => s.Trading_Volume);
-                const past20Volumes = volumes.slice(0, -1); // 排除今天
-                const vRatio = calculateVRatio(stock.Trading_Volume, past20Volumes);
-
-                // 計算均線
-                const closes = stockHistory.map(s => s.close);
-                const ma5 = calculateSMA(closes.slice(-5), 5);
-                const ma20 = calculateSMA(closes, Math.min(20, closes.length));
-
-                if (!ma5 || !ma20) continue;
-
-                // 檢查均線糾結
-                const maData = checkMaConstrict(ma5, ma20);
-
-                // 檢查突破
-                const changePercent = (stock.close - stock.open) / stock.open;
-                const isBreakout = stock.close > Math.max(ma5, ma20) && changePercent > 0.03;
-
-                // Stage 1 篩選條件
-                if (vRatio >= 3.5 && maData.isSqueezing && isBreakout) {
-                    candidates.push({
-                        stock_id: stock.stock_id,
-                        stock_name: stock.stock_name,
-                        close: stock.close,
-                        change_percent: stock.spread / (stock.close - stock.spread),
-                        score: 0, // Stage 1 不計算完整評分
-                        v_ratio: parseFloat(vRatio.toFixed(2)),
-                        is_ma_aligned: maData.isSqueezing,
-                        is_ma_breakout: isBreakout,
-                        consecutive_buy: 0,
-                        poc: stock.close,
-                        verdict: '初步發現 - 量能激增+均線糾結',
-                        tags: ['DISCOVERY', 'VOLUME_EXPLOSION', 'MA_SQUEEZE', 'BREAKOUT'],
-                        dailyVolumeTrend: volumes.slice(-10),
-                        maConstrictValue: maData.constrictValue,
-                        volumeIncreasing: checkVolumeIncreasing(volumes)
-                    });
-                }
-            } catch (error) {
-                console.warn(`[Scanner] Error processing ${stock.stock_id}:`, error);
-            }
-        }
-
-        // 按量能倍數排序，取前 50 名
-        const top50 = candidates
-            .sort((a, b) => b.v_ratio - a.v_ratio)
-            .slice(0, 50);
-
-        const t3 = Date.now();
-
-        console.log(`[Scanner] Stage 1 完成：發現 ${top50.length} 支潛力股`);
+        // 按量能倍數排序
+        const sorted = candidates.sort((a, b) => b.v_ratio - a.v_ratio);
 
         return {
-            results: top50,
+            results: sorted,
             timing: {
                 snapshot: t1 - t0,
-                historical: t2 - t1,
-                analysis: t3 - t2,
-                total: t3 - t0
+                analysis: t2 - t1,
+                total: t2 - t0,
+                processed: processedCount,
+                errors: errorCount
             }
         };
     },

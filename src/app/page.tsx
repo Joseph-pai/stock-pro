@@ -98,8 +98,8 @@ export default function DashboardPage() {
             )}
           >
             {stage === 'discovery' ? <Loader2 className="w-6 h-6 mb-1 animate-spin" /> : <Flame className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />}
-            <span className="text-xs font-bold uppercase">1. 選出潛力股</span>
-            <span className="text-[9px] text-slate-600 mt-1">量能激增+均線糾結</span>
+            <span className="text-xs font-bold uppercase">1. 三大信號共振</span>
+            <span className="text-[9px] text-slate-600 mt-1">嚴格標準・寧缺毋濫</span>
           </button>
 
           <button
