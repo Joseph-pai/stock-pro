@@ -102,7 +102,7 @@ export const ExchangeClient = {
                     const suffix = key.slice(4);
                     const fieldsKey = 'fields' + suffix;
                     const fields = res.data[fieldsKey];
-                    if (Array.isArray(fields) && fields.includes('證券代號')) {
+                    if (Array.isArray(fields) && (fields.includes('證券代號') || fields.includes('股票代號'))) {
                         quotesIn = res.data[key];
                         fieldsIn = fields;
                         break;
@@ -111,7 +111,7 @@ export const ExchangeClient = {
             }
 
             if (quotesIn.length === 0) {
-                console.warn(`TWSE: No stock table found in response for ${qDate}`);
+                console.warn(`TWSE: No stock table found in response for ${qDate}. Available keys: ${keys.filter(k => k.startsWith('fields')).join(', ')}`);
                 return [];
             }
 

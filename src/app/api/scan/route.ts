@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ScannerService } from '@/services/scanner';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     try {
         // No dates needed anymore for the initial scan (uses official daily snapshot)
