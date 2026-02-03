@@ -63,6 +63,7 @@ export interface AnalysisResult {
         volumeScore: number;
         maScore: number;
         chipScore: number; // Institutional
+        fundamentalBonus?: number; // Revenue YoY/MoM bonus
         total: number;
     };
     is_recommended?: boolean;   // Activated after Stage 3 analysis
