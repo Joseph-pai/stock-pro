@@ -50,7 +50,7 @@ export const ScannerService = {
      * 
      * 寧缺毋濫：返回所有符合條件的股票（可能 0-15 支）
      */
-    scanMarket: async (): Promise<{ results: AnalysisResult[], timing: any }> => {
+    scanMarket: async (settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<{ results: AnalysisResult[], timing: any }> => {
         const t0 = Date.now();
         console.log('[Scanner] Stage 1: Discovery - 兩階段篩選（快速預篩 + 嚴格驗證）...');
 
@@ -107,16 +107,17 @@ export const ScannerService = {
                         const volumes = history.map(s => s.Trading_Volume);
                         const vRatio = calculateVRatio(volumes);
 
-                        // 檢查均線糾結
-                        const maData = checkMaConstrict(ma5, ma20);
+                        const volThreshold = settings?.volumeRatio || 3.5;
+                        const squeezeThreshold = (settings?.maConstrict || 2.0) / 100;
+                        const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
 
-                        // 檢查突破
+                        const maData = checkMaConstrict(ma5, ma20, squeezeThreshold);
                         const today = history[history.length - 1];
                         const changePercent = (today.close - today.open) / today.open;
-                        const isBreakout = today.close > Math.max(ma5, ma20) && changePercent > 0.03;
+                        const isBreakout = today.close > Math.max(ma5, ma20) && changePercent >= breakoutThreshold;
 
-                        // 三大信號共振（嚴格標準）
-                        if (vRatio >= 3.5 && maData.isSqueezing && isBreakout) {
+                        // 三大信號共振（參考傳入設定或預設值）
+                        if (vRatio >= volThreshold && maData.isSqueezing && isBreakout) {
                             console.log(`[Scanner] ✓ Found: ${stock.stock_id} ${stock.stock_name} - V:${vRatio.toFixed(1)}x, MA:${(maData.constrictValue * 100).toFixed(1)}%, Break:${(changePercent * 100).toFixed(1)}%`);
 
                             const result: AnalysisResult = {
@@ -231,7 +232,7 @@ export const ScannerService = {
     /**
      * Stage 3: Individual Analysis (個股完整分析)
      */
-    analyzeStock: async (stockId: string): Promise<AnalysisResult | null> => {
+    analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<AnalysisResult | null> => {
         try {
             console.log(`[Analyze] Fetching data for ${stockId}...`);
 
@@ -287,7 +288,7 @@ export const ScannerService = {
                 return null;
             }
 
-            const result = evaluateStock(prices);
+            const result = evaluateStock(prices, settings);
             if (!result) return null;
 
             const today = prices[prices.length - 1];

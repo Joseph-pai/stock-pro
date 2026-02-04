@@ -19,7 +19,7 @@ interface ScanSettings {
 }
 
 const DEFAULT_SETTINGS: ScanSettings = {
-  volumeRatio: 2.0,
+  volumeRatio: 3.5, // 同步後端預設基準
   maConstrict: 2.0,
   breakoutPercent: 3.0
 };
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<ScanSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
+  const [isAnalyzingSingle, setIsAnalyzingSingle] = useState(false); // 新增單股分析狀態
 
   const [market, setMarket] = useState<MarketType>('TWSE');
   const [sector, setSector] = useState<string>('ALL');
@@ -71,7 +72,7 @@ export default function DashboardPage() {
 
   // Independent single-stock analysis for "三大信號" button
   const runSingleStockAnalysis = async (stockId: string) => {
-    setStage('fetching');
+    setIsAnalyzingSingle(true);
     setError(null);
     setResults([]);
     const t0 = Date.now();
@@ -99,7 +100,7 @@ export default function DashboardPage() {
 
       // Use sector_name from API directly
       const resolvedSector = singleResult.sector_name || (market === 'TWSE' ? '上市板' : '上櫃板');
-      
+
       console.debug(`[StockAnalysis] Stock ${singleResult.stock_id}: API sector="${singleResult.sector_name}", final="${resolvedSector}"`);
 
       const augmentedResult = {
@@ -174,7 +175,7 @@ export default function DashboardPage() {
           if (!aIsTarget && bIsTarget) return 1;
           return b.Trading_Volume - a.Trading_Volume;
         })
-        .slice(0, 300); // Increased slice for more market coverage
+        .slice(0, 200); // 修正掃描筆數上限為 200 筆，優化性能
 
       // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
@@ -204,7 +205,7 @@ export default function DashboardPage() {
             // API should already have sector_name from server-side industry mapping
             // Use it directly without client-side override
             const resolvedSector = r.sector_name || (market === 'TWSE' ? '上市板' : '上櫃板');
-            
+
             console.debug(`[StockScan] Stock ${r.stock_id}: API sector="${r.sector_name}", final="${resolvedSector}"`);
 
             return {
@@ -317,66 +318,76 @@ export default function DashboardPage() {
               <Settings className="w-6 h-6 text-slate-500" />
               <span className="text-xl font-black text-slate-300">信號閾值配置</span>
             </div>
-            <button
-              onClick={() => setSettings(DEFAULT_SETTINGS)}
-              className="text-sm font-black text-blue-500 hover:text-blue-400 underline underline-offset-4"
-            >
-              恢復預設
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-12">
-            {/* 1. Volume */}
-            <div className="space-y-5">
-              <div className="flex justify-between items-center">
-                <div className="flex flex-col">
-                  <span className="text-lg font-black text-slate-300">❶ 量能激增倍數 (V-Ratio)</span>
-                  <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
-                </div>
-                <span className="text-4xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
-              </div>
-              <input
-                type="range" min="1.0" max="6.0" step="0.5"
-                value={settings.volumeRatio}
-                onChange={(e) => setSettings({ ...settings, volumeRatio: parseFloat(e.target.value) })}
-                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-amber-500"
-              />
-            </div>
-
-            {/* 2. Squeeze */}
-            <div className="space-y-5">
-              <div className="flex justify-between items-center">
-                <div className="flex flex-col">
-                  <span className="text-lg font-black text-slate-300">❷ 均線糾結度 (MA Gap)</span>
-                  <span className="text-xs font-bold text-slate-500">▶ % 越低代表壓縮越緊，條件越 [極度嚴苛]</span>
-                </div>
-                <span className="text-4xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
-              </div>
-              <input
-                type="range" min="0.5" max="5.0" step="0.5"
-                value={settings.maConstrict}
-                onChange={(e) => setSettings({ ...settings, maConstrict: parseFloat(e.target.value) })}
-                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-
-            {/* 3. Breakout */}
-            <div className="space-y-5">
-              <div className="flex justify-between items-center">
-                <div className="flex flex-col">
-                  <span className="text-lg font-black text-slate-300">❸ 指標突破幅度 (今日漲幅)</span>
-                  <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
-                </div>
-                <span className="text-4xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
-              </div>
-              <input
-                type="range" min="1.0" max="8.0" step="0.5"
-                value={settings.breakoutPercent}
-                onChange={(e) => setSettings({ ...settings, breakoutPercent: parseFloat(e.target.value) })}
-                className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-emerald-500"
-              />
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSettings(DEFAULT_SETTINGS)}
+                className="text-sm font-black text-blue-500 hover:text-blue-400 underline underline-offset-4"
+              >
+                恢復預設
+              </button>
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm font-black text-white hover:bg-slate-700 transition-colors"
+              >
+                {showSettings ? '隱藏配置' : '展開配置'}
+              </button>
             </div>
           </div>
+
+          {showSettings && (
+            <div className="grid grid-cols-1 gap-12 animate-in fade-in slide-in-from-top-4 duration-300">
+              {/* 1. Volume */}
+              <div className="space-y-5">
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-black text-slate-300">❶ 量能激增倍數 (V-Ratio)</span>
+                    <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
+                  </div>
+                  <span className="text-4xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
+                </div>
+                <input
+                  type="range" min="1.0" max="6.0" step="0.5"
+                  value={settings.volumeRatio}
+                  onChange={(e) => setSettings({ ...settings, volumeRatio: parseFloat(e.target.value) })}
+                  className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+
+              {/* 2. Squeeze */}
+              <div className="space-y-5">
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-black text-slate-300">❷ 均線糾結度 (MA Gap)</span>
+                    <span className="text-xs font-bold text-slate-500">▶ % 越低代表壓縮越緊，條件越 [極度嚴苛]</span>
+                  </div>
+                  <span className="text-4xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
+                </div>
+                <input
+                  type="range" min="0.5" max="5.0" step="0.5"
+                  value={settings.maConstrict}
+                  onChange={(e) => setSettings({ ...settings, maConstrict: parseFloat(e.target.value) })}
+                  className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-purple-500"
+                />
+              </div>
+
+              {/* 3. Breakout */}
+              <div className="space-y-5">
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-black text-slate-300">❸ 指標突破幅度 (今日漲幅)</span>
+                    <span className="text-xs font-bold text-slate-500">▶ 數值越高條件越嚴苛</span>
+                  </div>
+                  <span className="text-4xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
+                </div>
+                <input
+                  type="range" min="1.0" max="8.0" step="0.5"
+                  value={settings.breakoutPercent}
+                  onChange={(e) => setSettings({ ...settings, breakoutPercent: parseFloat(e.target.value) })}
+                  className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer accent-emerald-500"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -426,7 +437,7 @@ export default function DashboardPage() {
             setSearchTerm(term);
             runSingleStockAnalysis(term);
           }}
-          isWorking={isWorking}
+          isWorking={isAnalyzingSingle} // 使用獨立的單股分析狀態
         />
       </div>
 

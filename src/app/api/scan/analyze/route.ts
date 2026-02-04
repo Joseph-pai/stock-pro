@@ -14,12 +14,12 @@ export const revalidate = 0;
  */
 function normalizeDate(dateStr: string): string {
     if (!dateStr) return dateStr;
-    
+
     // Try ISO format first (YYYY-MM-DD)
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateStr;
     }
-    
+
     // Try ROC format (RRRY/MM/DD or RRR/MM/DD)
     const rocMatch = dateStr.match(/^(\d{2,3})\/(\d{2})\/(\d{2})$/);
     if (rocMatch) {
@@ -29,7 +29,7 @@ function normalizeDate(dateStr: string): string {
         const gregorianYear = rocYear + 1911;
         return `${gregorianYear}-${month}-${day}`;
     }
-    
+
     return dateStr;
 }
 
@@ -87,13 +87,13 @@ export async function POST(req: Request) {
                         const rev = await FinMindExtras.getMonthlyRevenue({ stockId: stock.id, startDate: revStart, endDate: endDate });
                         if (Array.isArray(rev) && rev.length >= 2) {
                             const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-                            
+
                             // FIXED: Normalize dates before sorting
                             const normalized = rev.map((r: any) => ({
                                 ...r,
                                 date: normalizeDate(r.date)
                             }));
-                            
+
                             const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                             const latest = sorted[sorted.length - 1];
                             const latestRev = Number(getRevenue(latest)) || 0;
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
                                 const mom2 = revPrevPrev > 0 ? (revPrev - revPrevPrev) / revPrevPrev : 0;
                                 const pos1 = Math.max(0, mom1);
                                 const pos2 = Math.max(0, mom2);
-                                momScore = Math.min(1, ( (pos1 > 0 ? Math.min(pos1/0.2,1) : 0) + (pos2 > 0 ? Math.min(pos2/0.2,1) : 0) ) / 2);
+                                momScore = Math.min(1, ((pos1 > 0 ? Math.min(pos1 / 0.2, 1) : 0) + (pos2 > 0 ? Math.min(pos2 / 0.2, 1) : 0)) / 2);
                             }
 
                             // YoY score
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
                             if (sorted.length >= 13) {
                                 const dt = new Date(latest.date);
                                 const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
-                                const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth()+1).padStart(2,'0')}`;
+                                const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, '0')}`;
                                 const match = sorted.find((r: any) => r.date.startsWith(yearKey));
                                 if (match) {
                                     const revYear = Number(getRevenue(match)) || 0;
@@ -141,20 +141,25 @@ export async function POST(req: Request) {
                 const maScore = engineDetails.maScore || 0;
                 const chipScore = instScore;
                 const revenueBonusPointsTyped = typeof revenueBonusPoints === 'number' ? revenueBonusPoints : 0;
-                
+
                 // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
                 const normalizedVolumeScore = volumeScore * (35 / 40);
                 const normalizedMaScore = maScore * (25 / 30);
                 const normalizedChipScore = Math.min(chipScore * (25 / 30), 25);
                 const normalizedFundamentalBonus = Math.min(revenueBonusPointsTyped * (15 / 10), 15);
-                
+
                 const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
                 const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
+
+                // 使用用戶傳入的設定值作為判定門檻
+                const volThreshold = settings?.volumeRatio || 3.5;
+                const squeezeThreshold = (settings?.maConstrict || 2.0) / 100;
+                const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
 
                 const tags: typeof result['tags'] = ['DISCOVERY'];
                 if (evalData?.isBreakout) tags.push('BREAKOUT');
                 if (evalData?.maData?.isSqueezing) tags.push('MA_SQUEEZE');
-                if ((evalData?.vRatio || 0) >= 3) tags.push('VOLUME_EXPLOSION');
+                if ((evalData?.vRatio || 0) >= volThreshold) tags.push('VOLUME_EXPLOSION');
                 if (revenueSupport) tags.push('BASIC_SUPPORT');
 
                 const result: AnalysisResult = {
@@ -169,13 +174,13 @@ export async function POST(req: Request) {
                     is_ma_breakout: evalData ? evalData.isBreakout : false,
                     consecutive_buy: consecutiveBuy,
                     poc: today.close,
-                    verdict: finalScore >= 0.6 ? '高概率爆發候選' : (evalData?.isQualified ? '三大信號共振 - 爆發前兆' : '分析完成'),
+                    verdict: finalScore >= 0.6 ? '高概率爆發候選' : ((evalData?.vRatio || 0) >= volThreshold && (evalData?.maData?.constrictValue || 999) <= squeezeThreshold && (evalData?.dailyChange || 0) >= breakoutThreshold ? '三大信號共振 - 爆發前兆' : '分析完成'),
                     tags,
                     dailyVolumeTrend: volumes.slice(-10),
-                    maConstrictValue: evalData?.maData.constrictValue || 0,
+                    maConstrictValue: evalData?.maData?.constrictValue || 0,
                     today_volume: today.Trading_Volume,
                     volumeIncreasing: checkVolumeIncreasing(volumes),
-                    is_recommended: finalScore >= 0.6,
+                    is_recommended: finalScore >= 0.6 || ((evalData?.vRatio || 0) >= volThreshold && (evalData?.maData?.constrictValue || 999) <= squeezeThreshold && (evalData?.dailyChange || 0) >= breakoutThreshold),
                     comprehensiveScoreDetails: {
                         volumeScore: parseFloat(normalizedVolumeScore.toFixed(2)),
                         maScore: parseFloat(normalizedMaScore.toFixed(2)),
