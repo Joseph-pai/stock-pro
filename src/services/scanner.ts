@@ -1,6 +1,6 @@
 import { FinMindClient, } from '@/lib/finmind';
 import { FinMindExtras } from '@/lib/finmind';
-import { ExchangeClient } from '@/lib/exchange';
+import { ExchangeClient, normalizeAnyDate } from '@/lib/exchange';
 import { evaluateStock, calculateVRatio, checkMaConstrict, checkVolumeIncreasing } from './engine';
 import { AnalysisResult, StockData } from '@/types';
 import { format, subDays } from 'date-fns';
@@ -13,12 +13,12 @@ import { calculateSMA } from './indicators';
  */
 function normalizeDate(dateStr: string): string {
     if (!dateStr) return dateStr;
-    
+
     // Try ISO format first (YYYY-MM-DD)
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateStr;
     }
-    
+
     // Try ROC format (RRRY/MM/DD or RRR/MM/DD)
     const rocMatch = dateStr.match(/^(\d{2,3})\/(\d{2})\/(\d{2})$/);
     if (rocMatch) {
@@ -28,7 +28,7 @@ function normalizeDate(dateStr: string): string {
         const gregorianYear = rocYear + 1911;
         return `${gregorianYear}-${month}-${day}`;
     }
-    
+
     // Return as-is if format unrecognized
     console.warn(`[normalizeDate] Unrecognized date format: ${dateStr}`);
     return dateStr;
@@ -264,6 +264,24 @@ export const ScannerService = {
             } catch (finmindError) {
                 console.warn(`[Analyze] FinMind failed for ${stockId}, using ExchangeClient...`);
                 prices = await ExchangeClient.getStockHistory(stockId);
+
+                // ENSURE LATEST PRICE: If history is from a fallback, check if we can get a newer price from snapshot
+                try {
+                    const isTPEX = await ExchangeClient.isTpexStock(stockId);
+                    const snapshots = await ExchangeClient.getAllMarketQuotes(isTPEX ? 'TPEX' : 'TWSE');
+                    const latest = snapshots.find(s => s.stock_id === stockId);
+                    if (latest) {
+                        const lastInHistory = prices[prices.length - 1];
+                        if (!lastInHistory || latest.date > lastInHistory.date) {
+                            prices.push(latest);
+                            // Deduplicate and re-sort
+                            prices = Array.from(new Map(prices.map(p => [p.date, p])).values())
+                                .sort((a, b) => a.date.localeCompare(b.date));
+                        }
+                    }
+                } catch (snapshotError) {
+                    console.warn(`[Analyze] Quick snapshot fallback failed:`, snapshotError);
+                }
             }
 
             if (prices.length < 3) {
@@ -314,13 +332,13 @@ export const ScannerService = {
                 if (Array.isArray(rev) && rev.length >= 2) {
                     // Helper to extract revenue value from various possible fields
                     const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-                    
+
                     // FIXED: Normalize dates before sorting
                     const normalized = rev.map((r: any) => ({
                         ...r,
-                        date: normalizeDate(r.date)
+                        date: r.date.includes('/') ? normalizeAnyDate(r.date) : r.date
                     }));
-                    
+
                     // sort by normalized date ascending
                     const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                     const latest = sorted[sorted.length - 1];
@@ -338,7 +356,7 @@ export const ScannerService = {
                         // positive momentum counts; normalize over 20% growth
                         const pos1 = Math.max(0, mom1);
                         const pos2 = Math.max(0, mom2);
-                        momScore = Math.min(1, ( (pos1 > 0 ? Math.min(pos1/0.2,1) : 0) + (pos2 > 0 ? Math.min(pos2/0.2,1) : 0) ) / 2);
+                        momScore = Math.min(1, ((pos1 > 0 ? Math.min(pos1 / 0.2, 1) : 0) + (pos2 > 0 ? Math.min(pos2 / 0.2, 1) : 0)) / 2);
                     }
 
                     // YoY: try to find same month previous year
@@ -347,7 +365,7 @@ export const ScannerService = {
                         // latest date is now normalized (YYYY-MM-DD)
                         const dt = new Date(latest.date);
                         const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
-                        const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth()+1).padStart(2,'0')}`;
+                        const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, '0')}`;
                         const match = sorted.find((r: any) => r.date.startsWith(yearKey));
                         if (match) {
                             const revYear = Number(getRevenue(match)) || 0;
@@ -370,7 +388,7 @@ export const ScannerService = {
             const volumeScore = engineDetails.volumeScore || 0;
             const maScore = engineDetails.maScore || 0;
             const chipScore = instScore; // override
-            
+
             // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
             // Original: 40-30-30 = 100, then +10 revenue = 110 (incorrect)
             // New: 35-25-25-15 = 100 (maintains proportions while ensuring max 100)
@@ -378,7 +396,7 @@ export const ScannerService = {
             const normalizedMaScore = maScore * (25 / 30);         // scale from 30 to 25
             const normalizedChipScore = Math.min(chipScore * (25 / 30), 25); // scale from 30 to 25
             const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 10), 15); // scale from 10 to 15
-            
+
             const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
@@ -421,7 +439,7 @@ export const ScannerService = {
                     chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
                     fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分 • 基本面支撐` : '營收成長動能待觀察',
                     technical: result.isBreakout ? '帶量突破' : (result.maData.isSqueezing ? '均線糾結待突破' : '無明顯技術信號'),
-                    chips: consecutiveBuy >=3 ? `投信連買 ${consecutiveBuy} 天` : '無投信連買',
+                    chips: consecutiveBuy >= 3 ? `投信連買 ${consecutiveBuy} 天` : '無投信連買',
                     fundamental: revenueSupport ? '月營收連三月成長' : '營收未明顯支撐'
                 }
             };

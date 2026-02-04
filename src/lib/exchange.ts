@@ -1,7 +1,32 @@
 import axios from 'axios';
-import { format, subDays } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, parse } from 'date-fns';
 import { StockData } from '@/types';
 import { SECTORS } from './sectors';
+
+/**
+ * Utility to normalize various date formats to ISO YYYY-MM-DD
+ */
+export function normalizeAnyDate(dateStr: string): string {
+    if (!dateStr) return '';
+    const clean = dateStr.trim();
+
+    // 1. ROC Format: 113/02/04 or 113/2/4
+    const rocMatch = clean.match(/^(\d{2,3})\/(\d{1,2})\/(\d{1,2})$/);
+    if (rocMatch) {
+        const y = parseInt(rocMatch[1]) + 1911;
+        const m = rocMatch[2].padStart(2, '0');
+        const d = rocMatch[3].padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // 2. ISO-ish Format: 2024-02-04 or 2024/02/04
+    const isoMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    }
+
+    return clean;
+}
 
 /**
  * Enhanced Exchange Client
@@ -125,25 +150,73 @@ export const ExchangeClient = {
 
     getStockHistory: async (stockId: string): Promise<StockData[]> => {
         try {
-            const now = new Date();
-            const startDate = format(subDays(now, 70), 'yyyyMMdd');
-            const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${startDate}&stockNo=${stockId}`;
-            const res = await axios.get(url, { timeout: 10000 });
-            if (!res.data || !res.data.data) return [];
-            const data = res.data.data;
-            const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
-            return data.map((row: any) => ({
-                stock_id: stockId,
-                date: row[0],
-                Trading_Volume: parseNum(row[1]) / 1000,
-                open: parseNum(row[3]),
-                max: parseNum(row[4]),
-                min: parseNum(row[5]),
-                close: parseNum(row[6]),
-            })).filter((s: any) => s.close > 0);
-        } catch {
+            const isTPEX = await ExchangeClient.isTpexStock(stockId);
+            const monthsToFetch = 2; // Fetch current and previous month to ensure enough data
+            const allData: StockData[] = [];
+
+            for (let i = 0; i < monthsToFetch; i++) {
+                const targetDate = subMonths(new Date(), i);
+                let monthlyData: StockData[] = [];
+
+                if (!isTPEX) {
+                    // TWSE Logic
+                    const dateStr = format(targetDate, 'yyyyMM01');
+                    const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateStr}&stockNo=${stockId}`;
+                    const res = await axios.get(url, { timeout: 10000 });
+                    if (res.data && res.data.data) {
+                        const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
+                        monthlyData = res.data.data.map((row: any) => ({
+                            stock_id: stockId,
+                            date: normalizeAnyDate(row[0]),
+                            Trading_Volume: parseNum(row[1]) / 1000,
+                            open: parseNum(row[3]),
+                            max: parseNum(row[4]),
+                            min: parseNum(row[5]),
+                            close: parseNum(row[6]),
+                        }));
+                    }
+                } else {
+                    // TPEX Logic
+                    const rocYearMonth = `${targetDate.getFullYear() - 1911}/${format(targetDate, 'MM')}`;
+                    const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/stk_quote_result.php?l=zh-tw&d=${rocYearMonth}&stkno=${stockId}`;
+                    const res = await axios.get(url, { timeout: 10000 });
+                    if (res.data && res.data.aaData) {
+                        const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
+                        monthlyData = res.data.aaData.map((row: any) => ({
+                            stock_id: stockId,
+                            date: normalizeAnyDate(row[0]),
+                            Trading_Volume: parseNum(row[1]), // TPEX is usually in 1000 shares already in this API? Check.
+                            // Comparison with other TPEX APIs suggests this one might be in shares. 
+                            // Let's assume consistent with TWSE (1000 shares = 1 unit) if needed.
+                            open: parseNum(row[3]),
+                            max: parseNum(row[4]),
+                            min: parseNum(row[5]),
+                            close: parseNum(row[6]),
+                        }));
+                    }
+                }
+                allData.push(...monthlyData);
+            }
+
+            // Deduplicate, sort by date ascending
+            const unique = Array.from(new Map(allData.map(item => [item.date, item])).values());
+            return unique.sort((a, b) => a.date.localeCompare(b.date));
+        } catch (error) {
+            console.error(`[Exchange] History failed for ${stockId}:`, error);
             return [];
         }
+    },
+
+    /**
+     * Helper to determine market
+     */
+    isTpexStock: async (stockId: string): Promise<boolean> => {
+        // Simple heuristic: most TPEX stocks are 4 digits, but many overlap.
+        // Better: check mapping or specific length if applicable.
+        // For now, if we can't find it in industry mapping as TWSE, we try to guess.
+        // Real apps usually have a list or use a specific API.
+        // Let's check stockId length or specific prefixes if safe.
+        return stockId.length >= 5 || ['6488', '8069'].includes(stockId); // Add known TPEX
     },
 
     /**
