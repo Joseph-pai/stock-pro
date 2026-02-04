@@ -103,11 +103,9 @@ export const ScannerService = {
 
                         if (!ma5 || !ma20) return null;
 
-                        // 計算量能倍數
+                        // 計算量能倍數 (優化演算法：3日平均 vs 45日基線)
                         const volumes = history.map(s => s.Trading_Volume);
-                        const todayVolume = volumes[volumes.length - 1];
-                        const past20Volumes = volumes.slice(-21, -1);
-                        const vRatio = calculateVRatio(todayVolume, past20Volumes);
+                        const vRatio = calculateVRatio(volumes);
 
                         // 檢查均線糾結
                         const maData = checkMaConstrict(ma5, ma20);

@@ -5,12 +5,27 @@
 
 /**
  * Calculate Volume Ratio (量能倍數)
- * Today's Volume / Average Volume of past 20 days
+ * Optimized: Average of recent 3 days / Average of previous 45 days (baseline)
  */
-export function calculateVRatio(todayVolume: number, past20Volumes: number[]): number {
-    if (past20Volumes.length === 0) return 0;
-    const avg = past20Volumes.reduce((a, b) => a + b, 0) / past20Volumes.length;
-    return avg === 0 ? 0 : todayVolume / avg;
+export function calculateVRatio(volumes: number[]): number {
+    if (volumes.length < 10) return 0; // Insufficient data
+
+    // Recent observation period (default 3 days)
+    const observationPeriod = 3;
+    const baselinePeriod = 45;
+
+    // Use at most what we have, but try to respect the 48 day total (3+45)
+    const recentVolumes = volumes.slice(-observationPeriod);
+    const observationAvg = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
+
+    // Baseline: slice before the observation period
+    const remainingVolumes = volumes.slice(0, -observationPeriod);
+    const baselineVolumes = remainingVolumes.slice(-baselinePeriod);
+
+    if (baselineVolumes.length === 0) return 0;
+    const baselineAvg = baselineVolumes.reduce((a, b) => a + b, 0) / baselineVolumes.length;
+
+    return baselineAvg === 0 ? 0 : observationAvg / baselineAvg;
 }
 
 /**
@@ -58,7 +73,7 @@ export function evaluateStock(history: any[], settings?: { volumeRatio: number, 
     const ma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
 
     // 1. Volume Ratio
-    const vRatio = calculateVRatio(volumes[volumes.length - 1], volumes.slice(-21, -1));
+    const vRatio = calculateVRatio(volumes);
 
     // 2. MA Constrict
     const maData = checkMaConstrict(ma5, ma20, maRef);

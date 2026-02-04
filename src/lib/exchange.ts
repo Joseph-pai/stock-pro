@@ -151,7 +151,7 @@ export const ExchangeClient = {
     getStockHistory: async (stockId: string): Promise<StockData[]> => {
         try {
             const isTPEX = await ExchangeClient.isTpexStock(stockId);
-            const monthsToFetch = 2; // Fetch current and previous month to ensure enough data
+            const monthsToFetch = 3; // Fetch 3 months to ensure at least 48 trading days (45 baseline + 3 observation)
             const allData: StockData[] = [];
 
             for (let i = 0; i < monthsToFetch; i++) {
