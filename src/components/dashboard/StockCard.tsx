@@ -54,7 +54,7 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                                 <span className={cn(
                                     "text-sm font-black px-3 py-1.5 rounded-lg border font-mono tracking-widest",
                                     // Highlight if it's a specific industry (not generic board name)
-                                    !data.sector_name?.includes('板') 
+                                    !data.sector_name?.includes('板')
                                         ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
                                         : "bg-slate-800/80 text-slate-500 border-white/5"
                                 )}>
@@ -105,34 +105,43 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
 
             {/* Indicator Grid - Enhanced for User Request */}
             <div className="mt-8 grid grid-cols-3 gap-6 border-t border-white/5 pt-8">
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-col gap-1 group/tooltip relative">
+                    <div className="flex items-center gap-2 mb-1 cursor-help">
                         <Flame className={cn("w-5 h-5", data.v_ratio >= 1.5 ? "text-amber-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能%</span>
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black border-b border-dotted border-gray-600">量能倍數</span>
                     </div>
                     <span className={cn("text-3xl font-black font-mono italic", data.v_ratio >= 1.5 ? "text-white" : "text-slate-700")}>
                         {(data.v_ratio * 100).toFixed(0)}%
                     </span>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1 leading-tight">
+                        數值越大代表買盤越積極 (建議 {'>'} 300%)
+                    </p>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-col gap-1 group/tooltip relative">
+                    <div className="flex items-center gap-2 mb-1 cursor-help">
                         <Activity className={cn("w-5 h-5", (data.maConstrictValue || 1) <= 0.05 ? "text-purple-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">均線糾結</span>
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black border-b border-dotted border-gray-600">均線糾結</span>
                     </div>
                     <span className={cn("text-3xl font-black font-mono", (data.maConstrictValue || 1) <= 0.05 ? "text-white" : "text-slate-700")}>
                         {data.maConstrictValue ? `${(data.maConstrictValue * 100).toFixed(1)}%` : '--'}
                     </span>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1 leading-tight">
+                        數值越小代表壓縮越極致 (建議 {'<'} 5%)
+                    </p>
                 </div>
 
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 mb-1">
-                        <Zap className={cn("w-5 h-5", data.today_volume && data.today_volume > 0 ? "text-blue-400" : "text-slate-700")} />
-                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">量能數值</span>
+                        <Zap className={cn("w-5 h-5", (data.change_percent || 0) >= 0.03 ? "text-blue-400" : "text-slate-700")} />
+                        <span className="text-xs uppercase tracking-[0.2em] text-gray-500 font-black">今日漲幅</span>
                     </div>
-                    <span className={cn("text-2xl font-black font-mono", data.today_volume ? "text-white" : "text-slate-700")}>
-                        {data.today_volume ? `${Math.round(data.today_volume).toLocaleString()} 張` : '--'}
+                    <span className={cn("text-2xl font-black font-mono", (data.change_percent || 0) >= 0.03 ? "text-white" : "text-slate-700")}>
+                        {((data.change_percent || 0) * 100).toFixed(2)}%
                     </span>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1 leading-tight">
+                        帶量突破關鍵價位 (建議 {'>'} 3%)
+                    </p>
                 </div>
             </div>
 

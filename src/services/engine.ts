@@ -82,10 +82,11 @@ export function evaluateStock(history: any[], settings?: { volumeRatio: number, 
     const today = history[history.length - 1];
     const prevClose = history[history.length - 2].close;
     const changePercent = (today.close - prevClose) / prevClose;
-    const dailyChange = (today.close - today.open) / today.open;
+    // const dailyChange = (today.close - today.open) / today.open; // Deprecated: Confusing for users
 
     const isAboveMa = today.close > Math.max(ma5, ma20);
-    const isBreakout = isAboveMa && dailyChange >= breakRef;
+    // FIXED: Use changePercent (standard daily change) for breakout, matching UI
+    const isBreakout = isAboveMa && changePercent >= breakRef;
 
     // Compute scored components - use configurable thresholds
     const targetV = settings?.volumeRatio || CONFIG.SYSTEM.V_RATIO_THRESHOLD || 3.5;
@@ -95,7 +96,7 @@ export function evaluateStock(history: any[], settings?: { volumeRatio: number, 
     let maNorm = 0;
     if (maData.constrictValue <= squeezeTarget) maNorm = 1;
     else {
-        // decay over additional 10% gap
+        // decay over additional 10% gap (wider tolerance for partial scoring)
         maNorm = Math.max(0, 1 - ((maData.constrictValue - squeezeTarget) / 0.10));
     }
     // Institutional flow placeholder: unknown here, upstream should supply consecutive buy days.
@@ -112,7 +113,7 @@ export function evaluateStock(history: any[], settings?: { volumeRatio: number, 
         vRatio,
         maData,
         changePercent,
-        dailyChange,
+        dailyChange: changePercent, // Unify with changePercent
         isBreakout,
         isQualified: vRatio >= vRef && maData.isSqueezing && isBreakout,
         score,

@@ -113,7 +113,11 @@ export const ScannerService = {
 
                         const maData = checkMaConstrict(ma5, ma20, squeezeThreshold);
                         const today = history[history.length - 1];
-                        const changePercent = (today.close - today.open) / today.open;
+                        const prevClose = history[history.length - 2].close;
+                        // FIXED: Use standard daily change (vs prev close) instead of Day High/Low or Open/Close
+                        const changePercent = (today.close - prevClose) / prevClose;
+                        // const dailyChange = (today.close - today.open) / today.open; // Deprecated
+
                         const isBreakout = today.close > Math.max(ma5, ma20) && changePercent >= breakoutThreshold;
 
                         // 三大信號共振（參考傳入設定或預設值）
