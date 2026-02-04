@@ -470,9 +470,11 @@ export default function DashboardPage() {
                   <p className="text-blue-400 text-xl font-black">為什麼找不到？</p>
                 </div>
                 <ul className="text-slate-400 text-lg font-bold space-y-4">
-                  <li>1. **均線糾結度**：若設為 0.5%，代表均線必須極度重疊，這非常罕見。</li>
-                  <li>2. **共振條件**：當前市場可能並無同時符合「爆量」且「糾結」的股票。</li>
-                  <li className="text-blue-400 font-black mt-4">👉 建議：將「均線糾結度」調升至 3.0%~4.0% 試試看。</li>
+                  <li>1. **均線糾結度**：當前設為 {settings.maConstrict}%，代表均線必須高度重疊。</li>
+                  <li>2. **共振條件**：當前市場可能並無同時符合「{settings.volumeRatio}x 爆量」且「糾結」的股票。</li>
+                  {settings.maConstrict <= 2.0 && (
+                    <li className="text-blue-400 font-black mt-4">👉 建議：將「均線糾結度」調升至 3.0%~5.0% 試試看。</li>
+                  )}
                 </ul>
               </div>
             </div>
