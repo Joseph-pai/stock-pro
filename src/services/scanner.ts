@@ -188,7 +188,7 @@ export const ScannerService = {
     /**
      * Stage 2: Filtering (投信連買 + 法人同步 + 量能遞增)
      */
-    filterStocks: async (stockIds: string[]): Promise<{ results: AnalysisResult[], timing: any }> => {
+    filterStocks: async (stockIds: string[], settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<{ results: AnalysisResult[], timing: any }> => {
         const t0 = Date.now();
         console.log(`[Scanner] Stage 2: Filtering - 深度篩選 ${stockIds.length} 支股票...`);
 
@@ -196,7 +196,7 @@ export const ScannerService = {
 
         for (const stockId of stockIds) {
             try {
-                const result = await ScannerService.analyzeStock(stockId);
+                const result = await ScannerService.analyzeStock(stockId, settings);
                 if (!result) continue;
 
                 // Stage 2 篩選條件

@@ -6,11 +6,11 @@ export const revalidate = 0;
 
 export async function POST(req: Request) {
     try {
-        const { stage, stockIds, stockId } = await req.json();
+        const { stage, stockIds, stockId, settings } = await req.json();
 
         // Stage 1: Discovery (量能激增+均線糾結)
         if (stage === 'discovery') {
-            const { results, timing } = await ScannerService.scanMarket();
+            const { results, timing } = await ScannerService.scanMarket(settings);
             return NextResponse.json({
                 success: true,
                 data: results,
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
         // Stage 2: Filtering (投信連買+技術確認)
         if (stage === 'filter' && Array.isArray(stockIds)) {
-            const { results, timing } = await ScannerService.filterStocks(stockIds);
+            const { results, timing } = await ScannerService.filterStocks(stockIds, settings);
             return NextResponse.json({
                 success: true,
                 data: results,
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
         // Stage 3: Individual Analysis (個股完整分析)
         if (stage === 'expert' && stockId) {
-            const result = await ScannerService.analyzeStock(stockId);
+            const result = await ScannerService.analyzeStock(stockId, settings);
             return NextResponse.json({ success: true, data: result });
         }
 
