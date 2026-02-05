@@ -235,62 +235,81 @@ export const ScannerService = {
 
     /**
      * Stage 3: Individual Analysis (個股完整分析)
+     * Optimized with Redis Raw Data Caching
      */
     analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<AnalysisResult | null> => {
         try {
-            console.log(`[Analyze] Fetching data for ${stockId}...`);
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const redis = (await import('@/lib/redis')).redis;
 
-            // Load industry mapping
-            const industryMapping = await ExchangeClient.getIndustryMapping();
-
+            // 1. Fetch Price History (Cache: 4h)
             let prices: StockData[] = [];
-            let insts: any[] = [];
-
+            const priceCacheKey = `tsbs:raw:hist:${stockId}:${todayStr}`;
             try {
-                const endDate = format(new Date(), 'yyyy-MM-dd');
-                const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+                const cached = await redis.get(priceCacheKey);
+                if (cached) prices = JSON.parse(cached);
+            } catch (e) { console.warn('Redis read error (price):', e); }
 
-                const [priceData, instData] = await Promise.all([
-                    FinMindClient.getDailyStats({
-                        stockId,
-                        startDate,
-                        endDate
-                    }),
-                    FinMindClient.getInstitutional({
+            if (prices.length === 0) {
+                try {
+                    const endDate = todayStr;
+                    const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+                    prices = await FinMindClient.getDailyStats({ stockId, startDate, endDate });
+                } catch (e) {
+                    console.warn(`[Analyze] FinMind price failed for ${stockId}, fallback to Exchange...`);
+                    prices = await ExchangeClient.getStockHistory(stockId);
+                }
+                if (prices.length > 0) {
+                    try { await redis.set(priceCacheKey, JSON.stringify(prices), 'EX', 14400); } catch (e) { }
+                }
+            }
+
+            // 2. Fetch Institutional Flow (Cache: 4h)
+            let insts: any[] = [];
+            const instCacheKey = `tsbs:raw:inst:${stockId}:${todayStr}`;
+            try {
+                const cached = await redis.get(instCacheKey);
+                if (cached) insts = JSON.parse(cached);
+            } catch (e) { console.warn('Redis read error (inst):', e); }
+
+            if (insts.length === 0) {
+                try {
+                    insts = await FinMindClient.getInstitutional({
                         stockId,
                         startDate: format(subDays(new Date(), 10), 'yyyy-MM-dd'),
-                        endDate
-                    })
-                ]);
-                prices = priceData;
-                insts = instData;
-            } catch (finmindError) {
-                console.warn(`[Analyze] FinMind failed for ${stockId}, using ExchangeClient...`);
-                prices = await ExchangeClient.getStockHistory(stockId);
-
-                // ENSURE LATEST PRICE: If history is from a fallback, check if we can get a newer price from snapshot
-                try {
-                    const isTPEX = await ExchangeClient.isTpexStock(stockId);
-                    const snapshots = await ExchangeClient.getAllMarketQuotes(isTPEX ? 'TPEX' : 'TWSE');
-                    const latest = snapshots.find(s => s.stock_id === stockId);
-                    if (latest) {
-                        const lastInHistory = prices[prices.length - 1];
-                        if (!lastInHistory || latest.date > lastInHistory.date) {
-                            prices.push(latest);
-                            // Deduplicate and re-sort
-                            prices = Array.from(new Map(prices.map(p => [p.date, p])).values())
-                                .sort((a, b) => a.date.localeCompare(b.date));
-                        }
+                        endDate: todayStr
+                    });
+                    if (insts.length > 0) {
+                        try { await redis.set(instCacheKey, JSON.stringify(insts), 'EX', 14400); } catch (e) { }
                     }
-                } catch (snapshotError) {
-                    console.warn(`[Analyze] Quick snapshot fallback failed:`, snapshotError);
-                }
+                } catch (e) { console.warn(`[Analyze] Inst fetch failed for ${stockId}`); }
+            }
+
+            // 3. Fetch Monthly Revenue (Cache: 12h)
+            let rev: any[] = [];
+            const revCacheKey = `tsbs:raw:rev:${stockId}:${todayStr}`;
+            try {
+                const cached = await redis.get(revCacheKey);
+                if (cached) rev = JSON.parse(cached);
+            } catch (e) { console.warn('Redis read error (rev):', e); }
+
+            if (rev.length === 0) {
+                try {
+                    const revStart = format(subDays(new Date(), 400), 'yyyy-MM-dd');
+                    rev = await FinMindExtras.getMonthlyRevenue({ stockId, startDate: revStart, endDate: todayStr });
+                    if (rev.length > 0) {
+                        try { await redis.set(revCacheKey, JSON.stringify(rev), 'EX', 43200); } catch (e) { }
+                    }
+                } catch (e) { console.warn(`[Analyze] Revenue fetch failed for ${stockId}`); }
             }
 
             if (prices.length < 3) {
                 console.warn(`[Analyze] Insufficient data for ${stockId} (${prices.length} days found)`);
                 return null;
             }
+
+            // Load industry mapping (cached in exchange client usually, but here we can just use the memory map)
+            const industryMapping = await ExchangeClient.getIndustryMapping();
 
             const result = evaluateStock(prices, settings);
             if (!result) return null;
@@ -301,53 +320,38 @@ export const ScannerService = {
             let consecutiveBuy = 0;
             let instScore = 0;
             try {
-                const instData = insts || [];
-                // Filter for Investment_Trust entries and aggregate by date
-                const invTrust = instData.filter((d: any) => d.name === 'Investment_Trust');
-                // Build map of date -> net buy (buy - sell)
+                const invTrust = insts.filter((d: any) => d.name === 'Investment_Trust');
                 const byDate: Record<string, number> = {};
                 invTrust.forEach((row: any) => {
                     const dt = row.date;
                     const net = (row.buy || 0) - (row.sell || 0);
                     byDate[dt] = (byDate[dt] || 0) + net;
                 });
-                // Sort recent dates descending
                 const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
                 for (let i = 0; i < dates.length; i++) {
                     const d = dates[i];
                     if ((byDate[d] || 0) > 0) consecutiveBuy++; else break;
                 }
-
-                // Normalize instScore: 5 days or more => full score
                 instScore = Math.min(consecutiveBuy / 5, 1) * 30;
             } catch (e) {
                 consecutiveBuy = 0;
                 instScore = 0;
             }
 
-            // Fundamental check: YoY / MoM judgment and revenue bonus points
+            // Fundamental check
             let revenueSupport = false;
-            let revenueBonusPoints = 0; // up to 10 points
+            let revenueBonusPoints = 0;
             try {
-                const endDate = format(new Date(), 'yyyy-MM-dd');
-                const startDate = format(subDays(new Date(), 400), 'yyyy-MM-dd');
-                const rev = await FinMindExtras.getMonthlyRevenue({ stockId, startDate, endDate });
                 if (Array.isArray(rev) && rev.length >= 2) {
-                    // Helper to extract revenue value from various possible fields
                     const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-
-                    // FIXED: Normalize dates before sorting
                     const normalized = rev.map((r: any) => ({
                         ...r,
                         date: r.date.includes('/') ? normalizeAnyDate(r.date) : r.date
                     }));
-
-                    // sort by normalized date ascending
                     const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                     const latest = sorted[sorted.length - 1];
                     const latestRev = Number(getRevenue(latest)) || 0;
 
-                    // MoM: check last 2 increases (last vs prev, prev vs prevprev)
                     let momScore = 0;
                     if (sorted.length >= 3) {
                         const prev = sorted[sorted.length - 2];
@@ -356,16 +360,13 @@ export const ScannerService = {
                         const revPrevPrev = Number(getRevenue(prevprev)) || 0;
                         const mom1 = revPrev > 0 ? (latestRev - revPrev) / revPrev : 0;
                         const mom2 = revPrevPrev > 0 ? (revPrev - revPrevPrev) / revPrevPrev : 0;
-                        // positive momentum counts; normalize over 20% growth
                         const pos1 = Math.max(0, mom1);
                         const pos2 = Math.max(0, mom2);
                         momScore = Math.min(1, ((pos1 > 0 ? Math.min(pos1 / 0.2, 1) : 0) + (pos2 > 0 ? Math.min(pos2 / 0.2, 1) : 0)) / 2);
                     }
 
-                    // YoY: try to find same month previous year
                     let yoyScore = 0;
                     if (sorted.length >= 13) {
-                        // latest date is now normalized (YYYY-MM-DD)
                         const dt = new Date(latest.date);
                         const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
                         const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, '0')}`;
@@ -376,30 +377,17 @@ export const ScannerService = {
                             yoyScore = Math.max(0, Math.min(1, yoy / 0.2));
                         }
                     }
-
-                    // Revenue bonus: combine MoM and YoY (max 10 points)
                     revenueBonusPoints = Math.round((momScore * 5 + yoyScore * 5) * 100) / 100;
-                    revenueSupport = revenueBonusPoints > 0.5; // small threshold
+                    revenueSupport = revenueBonusPoints > 0.5;
                 }
-            } catch (e) {
-                revenueSupport = false;
-                revenueBonusPoints = 0;
-            }
+            } catch (e) { }
 
-            // Recompute comprehensive score: use engine components but inject instScore
+            // Recompute comprehensive score
             const engineDetails = result.comprehensiveScoreDetails || { volumeScore: 0, maScore: 0, chipScore: 0, total: 0 };
-            const volumeScore = engineDetails.volumeScore || 0;
-            const maScore = engineDetails.maScore || 0;
-            const chipScore = instScore; // override
-
-            // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
-            // Original: 40-30-30 = 100, then +10 revenue = 110 (incorrect)
-            // New: 35-25-25-15 = 100 (maintains proportions while ensuring max 100)
-            const normalizedVolumeScore = volumeScore * (35 / 40); // scale from 40 to 35
-            const normalizedMaScore = maScore * (25 / 30);         // scale from 30 to 25
-            const normalizedChipScore = Math.min(chipScore * (25 / 30), 25); // scale from 30 to 25
-            const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 10), 15); // scale from 10 to 15
-
+            const normalizedVolumeScore = (engineDetails.volumeScore || 0) * (35 / 40);
+            const normalizedMaScore = (engineDetails.maScore || 0) * (25 / 30);
+            const normalizedChipScore = Math.min(instScore * (25 / 30), 25);
+            const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 10), 15);
             const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
@@ -407,8 +395,11 @@ export const ScannerService = {
             if (result.isBreakout) tags.push('BREAKOUT');
             if (result.maData.isSqueezing) tags.push('MA_SQUEEZE');
             if ((result.vRatio || 0) >= 3) tags.push('VOLUME_EXPLOSION');
-
             if (revenueSupport) tags.push('BASIC_SUPPORT');
+
+            const volThreshold = settings?.volumeRatio || 3.5;
+            const squeezeThreshold = (settings?.maConstrict || 2.0) / 100;
+            const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
 
             return {
                 stock_id: stockId,
@@ -422,7 +413,7 @@ export const ScannerService = {
                 is_ma_breakout: result.isBreakout,
                 consecutive_buy: consecutiveBuy,
                 poc: today.close,
-                verdict: finalScore >= 0.6 ? '高概率爆發候選' : '分析完成',
+                verdict: finalScore >= 0.6 ? '高概率爆發候選' : ((result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold) ? '三大信號共振 - 爆發前兆' : '分析完成'),
                 tags,
                 history: prices,
                 maConstrictValue: result.maData.constrictValue,
@@ -436,7 +427,7 @@ export const ScannerService = {
                     fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
                     total: parseFloat(totalPoints.toFixed(2))
                 },
-                is_recommended: finalScore >= 0.6,
+                is_recommended: finalScore >= 0.6 || (result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold),
                 analysisHints: {
                     technicalSignals: `V-Ratio 升至 ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線高度糾結' : ''} • 量能激增`,
                     chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,

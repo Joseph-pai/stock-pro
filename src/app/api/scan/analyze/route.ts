@@ -1,37 +1,9 @@
 import { NextResponse } from 'next/server';
-import { ExchangeClient } from '@/lib/exchange';
-import { evaluateStock, checkVolumeIncreasing } from '@/services/engine';
-import { FinMindClient, } from '@/lib/finmind';
-import { FinMindExtras } from '@/lib/finmind';
+import { ScannerService } from '@/services/scanner';
 import { AnalysisResult } from '@/types';
-import { format, subDays } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-/**
- * Normalize date format: handles both ROC (民國 RRRY/MM/DD) and ISO (YYYY-MM-DD) formats
- */
-function normalizeDate(dateStr: string): string {
-    if (!dateStr) return dateStr;
-
-    // Try ISO format first (YYYY-MM-DD)
-    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return dateStr;
-    }
-
-    // Try ROC format (RRRY/MM/DD or RRR/MM/DD)
-    const rocMatch = dateStr.match(/^(\d{2,3})\/(\d{2})\/(\d{2})$/);
-    if (rocMatch) {
-        const rocYear = parseInt(rocMatch[1]);
-        const month = rocMatch[2];
-        const day = rocMatch[3];
-        const gregorianYear = rocYear + 1911;
-        return `${gregorianYear}-${month}-${day}`;
-    }
-
-    return dateStr;
-}
 
 export async function POST(req: Request) {
     try {
@@ -41,172 +13,25 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'Empty stock list' }, { status: 400 });
         }
 
-        console.log(`[Deep Analysis] Batch of ${stocks.length} stocks. Settings:`, settings);
+        console.log(`[Deep Analysis] Processing batch of ${stocks.length} stocks...`);
 
+        // Use the optimized ScannerService which handles Redis caching internally
         const results: AnalysisResult[] = [];
-
-        // Load industry mapping once for this batch
-        const industryMapping = await ExchangeClient.getIndustryMapping();
-
-        // Process this batch
         const batchResults = await Promise.allSettled(
             stocks.map(async (stock: { id: string, name: string }) => {
-                const history = await ExchangeClient.getStockHistory(stock.id);
-                if (history.length < 3) return null; // Minimum data required
-
-                const evalData = evaluateStock(history, settings);
-                const today = history[history.length - 1];
-                const volumes = history.map(h => h.Trading_Volume);
-
-                // Try to augment with institutional data from FinMind
-                let consecutiveBuy = 0;
-                let instScore = 0;
-                let revenueSupport = false;
-                let revenueBonusPoints = 0;
-                try {
-                    const endDate = format(new Date(), 'yyyy-MM-dd');
-                    const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-                    const instData = await FinMindClient.getInstitutional({ stockId: stock.id, startDate, endDate });
-                    const invTrust = instData.filter((d: any) => d.name === 'Investment_Trust');
-                    const byDate: Record<string, number> = {};
-                    invTrust.forEach((row: any) => {
-                        const dt = row.date;
-                        const net = (row.buy || 0) - (row.sell || 0);
-                        byDate[dt] = (byDate[dt] || 0) + net;
-                    });
-                    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-                    for (let i = 0; i < dates.length; i++) {
-                        const d = dates[i];
-                        if ((byDate[d] || 0) > 0) consecutiveBuy++; else break;
-                    }
-                    instScore = Math.min(consecutiveBuy / 5, 1) * 30;
-
-                    // monthly revenue check -> compute MoM / YoY scores
-                    try {
-                        const revStart = format(subDays(new Date(), 400), 'yyyy-MM-dd');
-                        const rev = await FinMindExtras.getMonthlyRevenue({ stockId: stock.id, startDate: revStart, endDate: endDate });
-                        if (Array.isArray(rev) && rev.length >= 2) {
-                            const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-
-                            // FIXED: Normalize dates before sorting
-                            const normalized = rev.map((r: any) => ({
-                                ...r,
-                                date: normalizeDate(r.date)
-                            }));
-
-                            const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
-                            const latest = sorted[sorted.length - 1];
-                            const latestRev = Number(getRevenue(latest)) || 0;
-
-                            // MoM score
-                            let momScore = 0;
-                            if (sorted.length >= 3) {
-                                const prev = sorted[sorted.length - 2];
-                                const prevprev = sorted[sorted.length - 3];
-                                const revPrev = Number(getRevenue(prev)) || 0;
-                                const revPrevPrev = Number(getRevenue(prevprev)) || 0;
-                                const mom1 = revPrev > 0 ? (latestRev - revPrev) / revPrev : 0;
-                                const mom2 = revPrevPrev > 0 ? (revPrev - revPrevPrev) / revPrevPrev : 0;
-                                const pos1 = Math.max(0, mom1);
-                                const pos2 = Math.max(0, mom2);
-                                momScore = Math.min(1, ((pos1 > 0 ? Math.min(pos1 / 0.2, 1) : 0) + (pos2 > 0 ? Math.min(pos2 / 0.2, 1) : 0)) / 2);
-                            }
-
-                            // YoY score
-                            let yoyScore = 0;
-                            if (sorted.length >= 13) {
-                                const dt = new Date(latest.date);
-                                const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
-                                const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, '0')}`;
-                                const match = sorted.find((r: any) => r.date.startsWith(yearKey));
-                                if (match) {
-                                    const revYear = Number(getRevenue(match)) || 0;
-                                    const yoy = revYear > 0 ? (latestRev - revYear) / revYear : 0;
-                                    yoyScore = Math.max(0, Math.min(1, yoy / 0.2));
-                                }
-                            }
-
-                            revenueBonusPoints = Math.round((momScore * 5 + yoyScore * 5) * 100) / 100;
-                            revenueSupport = revenueBonusPoints > 0.5;
-                        }
-                    } catch (e) {
-                        // ignore
-                    }
-                } catch (e) {
-                    // fallback: keep defaults
-                }
-
-                const engineDetails = evalData?.comprehensiveScoreDetails || { volumeScore: 0, maScore: 0, chipScore: 0, total: 0 };
-                const volumeScore = engineDetails.volumeScore || 0;
-                const maScore = engineDetails.maScore || 0;
-                const chipScore = instScore;
-                const revenueBonusPointsTyped = typeof revenueBonusPoints === 'number' ? revenueBonusPoints : 0;
-
-                // FIXED: Normalize weights to 100 total (35-25-25-15 distribution)
-                const normalizedVolumeScore = volumeScore * (35 / 40);
-                const normalizedMaScore = maScore * (25 / 30);
-                const normalizedChipScore = Math.min(chipScore * (25 / 30), 25);
-                const normalizedFundamentalBonus = Math.min(revenueBonusPointsTyped * (15 / 10), 15);
-
-                const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
-                const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
-
-                // 使用用戶傳入的設定值作為判定門檻
-                const volThreshold = settings?.volumeRatio || 3.5;
-                const squeezeThreshold = (settings?.maConstrict || 2.0) / 100;
-                const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
-
-                const tags: typeof result['tags'] = ['DISCOVERY'];
-                if (evalData?.isBreakout) tags.push('BREAKOUT');
-                if (evalData?.maData?.isSqueezing) tags.push('MA_SQUEEZE');
-                if ((evalData?.vRatio || 0) >= volThreshold) tags.push('VOLUME_EXPLOSION');
-                if (revenueSupport) tags.push('BASIC_SUPPORT');
-
-                const result: AnalysisResult = {
-                    stock_id: stock.id,
-                    stock_name: stock.name || stock.id,
-                    sector_name: industryMapping[stock.id.trim()] || '其他',
-                    close: today.close,
-                    change_percent: history.length > 1 ? (today.close - history[history.length - 2].close) / history[history.length - 2].close : 0,
-                    score: finalScore,
-                    v_ratio: evalData ? parseFloat(evalData.vRatio.toFixed(2)) : 0,
-                    is_ma_aligned: evalData ? evalData.maData.isSqueezing : false,
-                    is_ma_breakout: evalData ? evalData.isBreakout : false,
-                    consecutive_buy: consecutiveBuy,
-                    poc: today.close,
-                    verdict: finalScore >= 0.6 ? '高概率爆發候選' : ((evalData?.vRatio || 0) >= volThreshold && (evalData?.maData?.constrictValue || 999) <= squeezeThreshold && (evalData?.dailyChange || 0) >= breakoutThreshold ? '三大信號共振 - 爆發前兆' : '分析完成'),
-                    tags,
-                    dailyVolumeTrend: volumes.slice(-10),
-                    maConstrictValue: evalData?.maData?.constrictValue || 0,
-                    today_volume: today.Trading_Volume,
-                    volumeIncreasing: checkVolumeIncreasing(volumes),
-                    is_recommended: finalScore >= 0.6 || ((evalData?.vRatio || 0) >= volThreshold && (evalData?.maData?.constrictValue || 999) <= squeezeThreshold && (evalData?.dailyChange || 0) >= breakoutThreshold),
-                    comprehensiveScoreDetails: {
-                        volumeScore: parseFloat(normalizedVolumeScore.toFixed(2)),
-                        maScore: parseFloat(normalizedMaScore.toFixed(2)),
-                        chipScore: parseFloat(normalizedChipScore.toFixed(2)),
-                        fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
-                        total: parseFloat(totalPoints.toFixed(2))
-                    },
-                    analysisHints: {
-                        technicalSignals: `V-Ratio 升至 ${evalData?.vRatio.toFixed(1)}x${evalData?.maData.isSqueezing ? ' • 均線高度糾結' : ''} • 量能激增`,
-                        chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
-                        fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${(revenueBonusPoints.toFixed(1))}分 • 基本面支撐` : '營收成長動能待觀察'
-                    }
-                };
-
-                return result;
+                return await ScannerService.analyzeStock(stock.id, settings);
             })
         );
 
-        batchResults.forEach(r => {
+        batchResults.forEach((r, idx) => {
             if (r.status === 'fulfilled' && r.value) {
                 results.push(r.value);
-                console.log(`[Analyze] ✓ ${r.value.stock_id} (${r.value.stock_name}): sector="${r.value.sector_name}"`);
+            } else if (r.status === 'rejected') {
+                console.warn(`[Analyze API] Failed to analyze ${stocks[idx]?.id}:`, r.reason);
             }
         });
 
-        console.log(`[Analyze API] Batch complete: ${results.length}/${stocks.length} analyzed`);
+        console.log(`[Analyze API] Batch complete: ${results.length}/${stocks.length} analyzed (Includes cache hits)`);
 
         return NextResponse.json({
             success: true,

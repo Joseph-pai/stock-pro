@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ScannerService } from '@/services/scanner';
 import { redis } from '@/lib/redis';
-import { format } from 'date-fns';
 
-const TTL = 43200; // 12 hours
+const TTL = 43200; // 12 hours (Result cache)
 
 export async function GET(
     request: Request,
@@ -15,20 +14,21 @@ export async function GET(
     }
 
     try {
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const cacheKey = `tsbs:ai:${id}:${today}`;
+        const cacheKey = `tsbs:ai:res:${id}`; // Key for the final analysis result
 
-        // 1. Try Cache
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            return NextResponse.json({
-                success: true,
-                data: JSON.parse(cached),
-                cached: true
-            });
-        }
+        // 1. Try Result Cache (fastest)
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                return NextResponse.json({
+                    success: true,
+                    data: JSON.parse(cached),
+                    cached: true
+                });
+            }
+        } catch (e) { }
 
-        // 2. Fetch Fresh
+        // 2. Compute Fresh (uses internal raw data cache)
         const result = await ScannerService.analyzeStock(id);
 
         if (!result) {
@@ -38,8 +38,10 @@ export async function GET(
             }, { status: 404 });
         }
 
-        // 3. Save to Cache
-        await redis.set(cacheKey, JSON.stringify(result), 'EX', TTL);
+        // 3. Save to Result Cache
+        try {
+            await redis.set(cacheKey, JSON.stringify(result), 'EX', TTL);
+        } catch (e) { }
 
         return NextResponse.json({
             success: true,
