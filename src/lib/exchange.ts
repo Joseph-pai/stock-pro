@@ -266,13 +266,13 @@ export const ExchangeClient = {
                 });
             }
 
-            // 2. TPEX Listing Info
-            const tpexUrl = `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_per_quotes`;
+            // 2. TPEX Listing Info (MOPS Basic Info)
+            const tpexUrl = `https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O`;
             const tpexRes = await axios.get(tpexUrl, { timeout: 15000 });
             if (Array.isArray(tpexRes.data)) {
                 tpexRes.data.forEach((item: any) => {
                     const code = (item.SecuritiesCompanyCode || item['證券代號'] || item['公司代號'])?.trim();
-                    const sectorId = (item['掛牌類別'] || item.Sector || item['產業別'])?.trim();
+                    const sectorId = (item.SecuritiesIndustryCode || item['掛牌類別'] || item.Sector || item['產業別'])?.trim();
                     if (code && sectorId) {
                         mapping[code] = INDUSTRY_MAP[sectorId] || sectorId;
                     }
