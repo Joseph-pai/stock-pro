@@ -137,7 +137,7 @@ export const ExchangeClient = {
             return res.data.map((item: any) => {
                 // TPEX OpenAPI field names vary by endpoint/version
                 // Prioritize TradeQty (張數*1000) or TradeVolume/Volume (張數)
-                const vol = parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume) || parseNum(item.TotalVolume) || 0;
+                const vol = parseNum(item.TradingShares) || parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume) || parseNum(item.TotalVolume) || 0;
 
                 return {
                     stock_id: item.SecuritiesCompanyCode?.trim() || item.Code?.trim(),
