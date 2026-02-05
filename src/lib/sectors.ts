@@ -20,7 +20,6 @@ export const SECTORS = {
         { id: '05', name: '電機機械' },
         { id: '06', name: '電器電纜' },
         { id: '07', name: '化學工業' },
-        { id: '21', name: '化學工業' },
         { id: '08', name: '玻璃陶瓷' },
         { id: '09', name: '造紙工業' },
         { id: '10', name: '鋼鐵工業' },
@@ -52,7 +51,7 @@ export const SECTORS = {
         { id: '04', name: '紡織纖維' },
         { id: '05', name: '電機機械' },
         { id: '06', name: '電器電纜' },
-        { id: '07', name: '化學工業' },
+        // TPEX Chemical index is often 21 or 07, 21 is preferred for mainboard queries
         { id: '21', name: '化學工業' },
         { id: '08', name: '玻璃陶瓷' },
         { id: '10', name: '鋼鐵工業' },
