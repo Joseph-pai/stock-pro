@@ -8,21 +8,13 @@
  * Optimized: Average of recent 3 days / Average of previous 45 days (baseline)
  */
 export function calculateVRatio(volumes: number[]): number {
-    if (volumes.length < 10) return 0; // Insufficient data
+    if (volumes.length < 5) return 0;
 
-    // Recent observation period (default 3 days)
-    const observationPeriod = 3;
-    const baselinePeriod = 45;
+    // Standard Volume Ratio: Today vs Average of previous 5 days
+    const observationAvg = volumes[volumes.length - 1];
 
-    // Use at most what we have, but try to respect the 48 day total (3+45)
-    const recentVolumes = volumes.slice(-observationPeriod);
-    const observationAvg = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
-
-    // Baseline: slice before the observation period
-    const remainingVolumes = volumes.slice(0, -observationPeriod);
-    const baselineVolumes = remainingVolumes.slice(-baselinePeriod);
-
-    if (baselineVolumes.length === 0) return 0;
+    // Baseline: last 5 days before today
+    const baselineVolumes = volumes.slice(-6, -1);
     const baselineAvg = baselineVolumes.reduce((a, b) => a + b, 0) / baselineVolumes.length;
 
     return baselineAvg === 0 ? 0 : observationAvg / baselineAvg;

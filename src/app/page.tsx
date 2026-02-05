@@ -70,12 +70,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const init = async () => {
       try {
+        const needsRefresh = sessionStorage.getItem('tsm_force_refresh') === 'true';
+
         // Check if industry map is cached
         const cachedMap = sessionStorage.getItem('tsbs_industry_map');
-        if (cachedMap) {
+        if (cachedMap && !needsRefresh) {
           setIndustryMap(JSON.parse(cachedMap));
         } else {
-          const mappingRes = await fetch('/api/market/industry-mapping');
+          const mappingRes = await fetch(`/api/market/industry-mapping${needsRefresh ? '?refresh=true' : ''}`);
           const mappingJson = await mappingRes.json();
           if (mappingJson.success) {
             setIndustryMap(mappingJson.data);
@@ -86,15 +88,19 @@ export default function DashboardPage() {
         // Check if initial snapshot is cached
         const cacheKey = `tsbs_snapshot_${market}_${sector}`;
         const cachedSnapshot = sessionStorage.getItem(cacheKey);
-        if (cachedSnapshot) {
+        if (cachedSnapshot && !needsRefresh) {
           setSnapshot(JSON.parse(cachedSnapshot));
         } else {
-          const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}`);
+          const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}${needsRefresh ? '&refresh=true' : ''}`);
           const snapshotJson = await snapshotRes.json();
           if (snapshotJson.success) {
             setSnapshot(snapshotJson.data);
             sessionStorage.setItem(cacheKey, JSON.stringify(snapshotJson.data));
           }
+        }
+
+        if (needsRefresh) {
+          sessionStorage.removeItem('tsm_force_refresh');
         }
       } catch (e) {
         console.error('Data initialization failed:', e);
@@ -105,6 +111,7 @@ export default function DashboardPage() {
 
   const clearAllCache = () => {
     sessionStorage.clear();
+    sessionStorage.setItem('tsm_force_refresh', 'true');
     window.location.reload();
   };
 
@@ -175,7 +182,7 @@ export default function DashboardPage() {
     }
   };
 
-  const runScan = async (overrideTerm?: string) => {
+  const runScan = async (overrideTerm?: string, forceRefresh?: boolean) => {
     const activeTerm = overrideTerm || searchTerm;
     setStage('fetching');
     setHasScanned(false);
@@ -187,7 +194,7 @@ export default function DashboardPage() {
       // Phase 1: Directed Fetch
       setProgress({ current: 0, total: 0, phase: `正在獲取 ${MARKET_NAMES[market]} - ${currentSectorName} 數據...` });
 
-      const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}`);
+      const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}${forceRefresh ? '&refresh=true' : ''}`);
       const snapshotJson = await snapshotRes.json();
       if (!snapshotJson.success) throw new Error(snapshotJson.error);
 
@@ -222,7 +229,7 @@ export default function DashboardPage() {
           if (!aIsTarget && bIsTarget) return 1;
           return b.Trading_Volume - a.Trading_Volume;
         })
-        .slice(0, 200); // 修正掃描筆數上限為 200 筆，優化性能
+        .slice(0, 500); // 擴大掃描筆數上限為 500 筆，確保不遺漏潛力股
 
       // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
