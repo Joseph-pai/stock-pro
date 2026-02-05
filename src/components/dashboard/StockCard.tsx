@@ -54,11 +54,14 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                                 <span className={cn(
                                     "text-sm font-black px-3 py-1.5 rounded-lg border font-mono tracking-widest",
                                     // Highlight if it's a specific industry (not generic board name)
-                                    !data.sector_name?.includes('板')
+                                    !data.sector_name?.includes('板') && isNaN(parseInt(data.sector_name))
                                         ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
                                         : "bg-slate-800/80 text-slate-500 border-white/5"
                                 )}>
-                                    {data.sector_name}
+                                    {/* Double-check mapping if server sent ID instead of name */}
+                                    {(!isNaN(parseInt(data.sector_name)) && data.sector_name.length <= 2)
+                                        ? (require('@/lib/sectors').INDUSTRY_MAP[data.sector_name] || data.sector_name)
+                                        : data.sector_name}
                                 </span>
                             )}
                         </div>

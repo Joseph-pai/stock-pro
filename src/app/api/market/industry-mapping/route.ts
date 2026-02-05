@@ -4,7 +4,7 @@ import { redis } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_KEY = 'tsbs:map:industry';
+const CACHE_KEY = 'tsbs:map:industry:v2';
 const TTL = 60 * 60 * 24 * 7; // 7 days
 
 export async function GET(req: Request) {

@@ -13,7 +13,7 @@ export async function GET(req: Request) {
         const sector = searchParams.get('sector') || (market === 'TWSE' ? 'ALL' : 'AL');
         const refresh = searchParams.get('refresh') === 'true';
 
-        const cacheKey = `tsbs:snap:${market}:${sector}`;
+        const cacheKey = `tsbs:snap:v2:${market}:${sector}`;
 
         // 1. Try Cache (unless refresh requested)
         if (!refresh) {
