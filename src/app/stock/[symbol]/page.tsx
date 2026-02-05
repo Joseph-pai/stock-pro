@@ -31,9 +31,23 @@ export default function StockDetailPage() {
     const { data: rawData, isLoading, isError } = useQuery({
         queryKey: ['stock', symbol],
         queryFn: async () => {
+            // Check cache first
+            const cacheKey = `tsbs_analysis_${symbol}`;
+            const cached = sessionStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    return JSON.parse(cached) as AnalysisResult;
+                } catch (e) {
+                    console.error('Failed to parse cached analysis:', e);
+                }
+            }
+
             const res = await fetch(`/api/analyze/${symbol}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
+
+            // Save to cache
+            sessionStorage.setItem(cacheKey, JSON.stringify(json.data));
             return json.data as AnalysisResult;
         },
         retry: 1
@@ -115,6 +129,17 @@ export default function StockDetailPage() {
 
     return (
         <div className={`flex flex-col bg-slate-950 text-white ${isLandscape ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+            {/* Landscape Floating Home Button */}
+            {isLandscape && (
+                <button
+                    onClick={() => router.back()}
+                    className="fixed top-6 left-6 z-[100] p-4 bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-full text-slate-400 hover:text-white hover:border-blue-500 transition-all shadow-2xl active:scale-90"
+                    title="返回列表"
+                >
+                    <ChevronLeft className="w-8 h-8" />
+                </button>
+            )}
+
             {/* Minimal Header for Mobile */}
             {!isLandscape && (
                 <header className="px-6 py-4 flex items-center justify-between border-b border-white/5 bg-slate-900/40 backdrop-blur-xl sticky top-0 z-30">

@@ -42,25 +42,72 @@ export default function DashboardPage() {
   const [industryMap, setIndustryMap] = useState<Record<string, string>>({});
   const [snapshot, setSnapshot] = useState<StockData[]>([]);
 
-  // Load industry mapping and initial snapshot on mount
+  // 1. Core State Persistence (Session-based)
+  useEffect(() => {
+    const saved = sessionStorage.getItem('tsbs_scanner_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setResults(parsed.results || []);
+        setSettings(parsed.settings || DEFAULT_SETTINGS);
+        setMarket(parsed.market || 'TWSE');
+        setSector(parsed.sector || (parsed.market === 'TWSE' ? 'ALL' : 'AL'));
+        setHasScanned(parsed.hasScanned || false);
+        setTiming(parsed.timing || null);
+      } catch (e) {
+        console.error('Failed to load session state:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('tsbs_scanner_state', JSON.stringify({
+      results, settings, market, sector, hasScanned, timing
+    }));
+  }, [results, settings, market, sector, hasScanned, timing]);
+
+  // 2. Heavy Market Data Caching (Session-based)
   useEffect(() => {
     const init = async () => {
       try {
-        // 1. Load Industry Mapping
-        const mappingRes = await fetch('/api/market/industry-mapping');
-        const mappingJson = await mappingRes.json();
-        if (mappingJson.success) setIndustryMap(mappingJson.data);
+        // Check if industry map is cached
+        const cachedMap = sessionStorage.getItem('tsbs_industry_map');
+        if (cachedMap) {
+          setIndustryMap(JSON.parse(cachedMap));
+        } else {
+          const mappingRes = await fetch('/api/market/industry-mapping');
+          const mappingJson = await mappingRes.json();
+          if (mappingJson.success) {
+            setIndustryMap(mappingJson.data);
+            sessionStorage.setItem('tsbs_industry_map', JSON.stringify(mappingJson.data));
+          }
+        }
 
-        // 2. Load Initial Snapshot for Search Dropdown (TWSE ALL)
-        const snapshotRes = await fetch('/api/market/snapshot?market=TWSE&sector=ALL');
-        const snapshotJson = await snapshotRes.json();
-        if (snapshotJson.success) setSnapshot(snapshotJson.data);
+        // Check if initial snapshot is cached
+        const cacheKey = `tsbs_snapshot_${market}_${sector}`;
+        const cachedSnapshot = sessionStorage.getItem(cacheKey);
+        if (cachedSnapshot) {
+          setSnapshot(JSON.parse(cachedSnapshot));
+        } else {
+          const snapshotRes = await fetch(`/api/market/snapshot?market=${market}&sector=${sector}`);
+          const snapshotJson = await snapshotRes.json();
+          if (snapshotJson.success) {
+            setSnapshot(snapshotJson.data);
+            sessionStorage.setItem(cacheKey, JSON.stringify(snapshotJson.data));
+          }
+        }
       } catch (e) {
-        console.error('Initial data load failed:', e);
+        console.error('Data initialization failed:', e);
       }
     };
     init();
-  }, []);
+  }, [market, sector]);
+
+  const clearAllCache = () => {
+    sessionStorage.clear();
+    window.location.reload();
+  };
+
   // Reset sector when market changes
   useEffect(() => {
     setSector(market === 'TWSE' ? 'ALL' : 'AL');
@@ -319,6 +366,14 @@ export default function DashboardPage() {
               <span className="text-xl font-black text-slate-300">信號閾值配置</span>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={clearAllCache}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-sm font-black text-red-400 hover:bg-red-500/20 transition-all shadow-lg shadow-red-500/5 group"
+                title="清除所有暫存並重新抓取"
+              >
+                <Loader2 className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+                全部數據更新
+              </button>
               <button
                 onClick={() => setSettings(DEFAULT_SETTINGS)}
                 className="text-sm font-black text-blue-500 hover:text-blue-400 underline underline-offset-4"
