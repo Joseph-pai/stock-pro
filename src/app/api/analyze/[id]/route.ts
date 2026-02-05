@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ScannerService } from '@/services/scanner';
+import { redis } from '@/lib/redis';
+import { format } from 'date-fns';
+
+const TTL = 43200; // 12 hours
 
 export async function GET(
     request: Request,
@@ -11,6 +15,20 @@ export async function GET(
     }
 
     try {
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const cacheKey = `tsbs:ai:${id}:${today}`;
+
+        // 1. Try Cache
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            return NextResponse.json({
+                success: true,
+                data: JSON.parse(cached),
+                cached: true
+            });
+        }
+
+        // 2. Fetch Fresh
         const result = await ScannerService.analyzeStock(id);
 
         if (!result) {
@@ -19,6 +37,9 @@ export async function GET(
                 error: 'Analysis failed or insufficient data'
             }, { status: 404 });
         }
+
+        // 3. Save to Cache
+        await redis.set(cacheKey, JSON.stringify(result), 'EX', TTL);
 
         return NextResponse.json({
             success: true,
