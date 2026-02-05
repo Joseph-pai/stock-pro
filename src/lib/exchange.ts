@@ -241,7 +241,9 @@ export const ExchangeClient = {
             '2317': '其他電子',
             '1721': '化學工業',
             '3323': '電腦週邊',
-            '3630': '光電業'
+            '3630': '光電業',
+            '3615': '光電業',
+            '3663': '光電業'
         };
         Object.assign(mapping, HARD_FIXES);
 
