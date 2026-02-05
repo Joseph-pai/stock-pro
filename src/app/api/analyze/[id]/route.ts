@@ -29,7 +29,7 @@ export async function GET(
         } catch (e) { }
 
         // 2. Compute Fresh (uses internal raw data cache)
-        const result = await ScannerService.analyzeStock(id);
+        const result = await ScannerService.analyzeStock(id, undefined);
 
         if (!result) {
             return NextResponse.json({

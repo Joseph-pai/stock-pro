@@ -237,7 +237,7 @@ export const ScannerService = {
      * Stage 3: Individual Analysis (個股完整分析)
      * Optimized with Redis Raw Data Caching
      */
-    analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<AnalysisResult | null> => {
+    analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }, stockName?: string): Promise<AnalysisResult | null> => {
         try {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
             const redis = (await import('@/lib/redis')).redis;
@@ -391,19 +391,19 @@ export const ScannerService = {
             const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
-            const tags: AnalysisResult['tags'] = ['DISCOVERY'];
-            if (result.isBreakout) tags.push('BREAKOUT');
-            if (result.maData.isSqueezing) tags.push('MA_SQUEEZE');
-            if ((result.vRatio || 0) >= 3) tags.push('VOLUME_EXPLOSION');
-            if (revenueSupport) tags.push('BASIC_SUPPORT');
-
             const volThreshold = settings?.volumeRatio || 3.5;
             const squeezeThreshold = (settings?.maConstrict || 2.0) / 100;
             const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
 
+            const tags: AnalysisResult['tags'] = ['DISCOVERY'];
+            if (result.isBreakout) tags.push('BREAKOUT');
+            if (result.maData.isSqueezing) tags.push('MA_SQUEEZE');
+            if (result.vRatio >= volThreshold) tags.push('VOLUME_EXPLOSION');
+            if (revenueSupport) tags.push('BASIC_SUPPORT');
+
             return {
                 stock_id: stockId,
-                stock_name: today.stock_name || stockId,
+                stock_name: stockName || today.stock_name || stockId,
                 sector_name: industryMapping[stockId.trim()] || '其他',
                 close: today.close,
                 change_percent: result.changePercent,

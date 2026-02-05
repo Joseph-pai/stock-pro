@@ -19,7 +19,7 @@ export async function POST(req: Request) {
         const results: AnalysisResult[] = [];
         const batchResults = await Promise.allSettled(
             stocks.map(async (stock: { id: string, name: string }) => {
-                return await ScannerService.analyzeStock(stock.id, settings);
+                return await ScannerService.analyzeStock(stock.id, settings, stock.name);
             })
         );
 
