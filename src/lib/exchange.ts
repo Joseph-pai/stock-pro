@@ -230,25 +230,21 @@ export const ExchangeClient = {
      */
     getIndustryMapping: async (): Promise<Record<string, string>> => {
         const mapping: Record<string, string> = {};
+        const { INDUSTRY_MAP } = await import('./sectors');
 
-        // Robust Fallback / Hard-fixes for common stocks (apply first as base)
+        // Robust Fallback / Hard-fixes for common stocks
         const HARD_FIXES: Record<string, string> = {
-            '2887': '貿易百貨',        // 台新新光金
+            '2887': '金融保險',        // 台新新光金
             '6426': '通信網路',        // 統新
             '6451': '半導體業',
             '2330': '半導體業',
-            '2317': '其他電子'
+            '2317': '其他電子',
+            '1721': '化學工業'
         };
         Object.assign(mapping, HARD_FIXES);
 
-        // Lookup name maps
-        const twseMap: any = {};
-        SECTORS.TWSE.forEach(s => twseMap[s.id] = s.name);
-        const tpexMap: any = {};
-        SECTORS.TPEX.forEach(s => tpexMap[s.id] = s.name);
-
         try {
-            // 1. TWSE Listing Info (Correct keys: 公司代號, 產業別)
+            // 1. TWSE Listing Info
             const twseUrl = `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`;
             const twseRes = await axios.get(twseUrl, { timeout: 15000 });
             if (Array.isArray(twseRes.data)) {
@@ -256,27 +252,28 @@ export const ExchangeClient = {
                     const code = (item['公司代號'] || item['Code'] || item['證券代號'])?.trim();
                     const sectorId = (item['產業別'] || item['Sector'] || item['產業別名稱'])?.trim();
                     if (code && sectorId) {
-                        // Some APIs return sector name directly, others return ID
-                        mapping[code] = twseMap[sectorId] || sectorId;
+                        mapping[code] = INDUSTRY_MAP[sectorId] || sectorId;
                     }
                 });
             }
 
-            // 2. TPEX Listing Info (Correct keys: SecuritiesCompanyCode, 掛牌類別)
+            // 2. TPEX Listing Info
             const tpexUrl = `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_per_quotes`;
             const tpexRes = await axios.get(tpexUrl, { timeout: 15000 });
             if (Array.isArray(tpexRes.data)) {
                 tpexRes.data.forEach((item: any) => {
                     const code = (item.SecuritiesCompanyCode || item['證券代號'] || item['公司代號'])?.trim();
-                    const sectorName = (item['掛牌類別'] || item.Sector || item['產業別'])?.trim();
-                    if (code && sectorName) {
-                        mapping[code] = sectorName;
+                    const sectorId = (item['掛牌類別'] || item.Sector || item['產業別'])?.trim();
+                    if (code && sectorId) {
+                        mapping[code] = INDUSTRY_MAP[sectorId] || sectorId;
                     }
                 });
             }
 
-            // Re-apply hard fixes to ensure they always override (in case API has outdated data)
+            // Re-apply hard fixes
             Object.assign(mapping, HARD_FIXES);
+
+            return mapping;
 
             // Enhanced logging for industry mapping
             Object.keys(mapping).forEach(code => {

@@ -9,7 +9,45 @@ export const MARKET_NAMES: Record<MarketType, string> = {
     TPEX: '上櫃 (TPEX)'
 };
 
-// Common Sectors Mapping (Mapped to TWSE/TPEX type codes)
+/**
+ * Universal Industry Code Map
+ * Ensures badges are always translated even if the ID varies between APIs
+ */
+export const INDUSTRY_MAP: Record<string, string> = {
+    '01': '水泥工業',
+    '02': '食品工業',
+    '03': '塑膠工業',
+    '04': '紡織纖維',
+    '05': '電機機械',
+    '06': '電器電纜',
+    '07': '化學工業',
+    '21': '化學工業',
+    '08': '玻璃陶瓷',
+    '09': '造紙工業',
+    '10': '鋼鐵工業',
+    '11': '橡膠工業',
+    '12': '汽車工業',
+    '13': '電子全部',
+    '14': '建材營造',
+    '15': '航運業',
+    '16': '觀光事業',
+    '17': '金融保險',
+    '18': '貿易百貨',
+    '19': '綜合',
+    '20': '其他',
+    '22': '生技醫療',
+    '23': '油脂燃料',
+    '24': '半導體業',
+    '25': '電腦週邊',
+    '26': '光電業',
+    '27': '通信網路',
+    '28': '電子零組件',
+    '29': '電子通路',
+    '30': '資訊服務',
+    '31': '其他電子',
+};
+
+// Selection Sectors Mapping (Targeted for MI_INDEX API)
 export const SECTORS = {
     TWSE: [
         { id: 'ALL', name: '全部類股' },
@@ -25,7 +63,6 @@ export const SECTORS = {
         { id: '10', name: '鋼鐵工業' },
         { id: '11', name: '橡膠工業' },
         { id: '12', name: '汽車工業' },
-        { id: '13', name: '電子全部' },
         { id: '24', name: '半導體業' },
         { id: '25', name: '電腦週邊' },
         { id: '26', name: '光電業' },
@@ -40,9 +77,7 @@ export const SECTORS = {
         { id: '22', name: '生技醫療' },
         { id: '17', name: '金融保險' },
         { id: '18', name: '貿易百貨' },
-        { id: '19', name: '綜合' },
         { id: '20', name: '其他' },
-        { id: '23', name: '油脂燃料' },
     ],
     TPEX: [
         { id: 'AL', name: '全部類股' },
@@ -51,14 +86,12 @@ export const SECTORS = {
         { id: '04', name: '紡織纖維' },
         { id: '05', name: '電機機械' },
         { id: '06', name: '電器電纜' },
-        // TPEX Chemical index is often 21 or 07, 21 is preferred for mainboard queries
         { id: '21', name: '化學工業' },
         { id: '08', name: '玻璃陶瓷' },
         { id: '10', name: '鋼鐵工業' },
         { id: '11', name: '橡膠工業' },
         { id: '12', name: '汽車工業' },
         { id: '22', name: '生技醫療' },
-        { id: '23', name: '油脂燃料' },
         { id: '24', name: '半導體業' },
         { id: '25', name: '電腦週邊' },
         { id: '26', name: '光電業' },
