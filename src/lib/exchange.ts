@@ -134,17 +134,23 @@ export const ExchangeClient = {
                 return isNaN(parsed) ? 0 : parsed;
             };
 
-            return res.data.map((item: any) => ({
-                stock_id: item.SecuritiesCompanyCode?.trim(),
-                stock_name: item.CompanyName?.trim(),
-                date: format(new Date(), 'yyyy-MM-dd'),
-                close: parseNum(item.Close),
-                spread: parseNum(item.Change),
-                open: parseNum(item.Open),
-                max: parseNum(item.High),
-                min: parseNum(item.Low),
-                Trading_Volume: (parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume)) / 1000,
-            })).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
+            return res.data.map((item: any) => {
+                // TPEX OpenAPI field names vary by endpoint/version
+                // Prioritize TradeQty (張數*1000) or TradeVolume/Volume (張數)
+                const vol = parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume) || parseNum(item.TotalVolume) || 0;
+
+                return {
+                    stock_id: item.SecuritiesCompanyCode?.trim() || item.Code?.trim(),
+                    stock_name: item.CompanyName?.trim() || item.Name?.trim(),
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    close: parseNum(item.Close) || parseNum(item.ClosingPrice),
+                    spread: parseNum(item.Change),
+                    open: parseNum(item.Open) || parseNum(item.OpeningPrice),
+                    max: parseNum(item.High) || parseNum(item.HighestPrice),
+                    min: parseNum(item.Low) || parseNum(item.LowestPrice),
+                    Trading_Volume: vol / 1000,
+                };
+            }).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
         }
     },
 

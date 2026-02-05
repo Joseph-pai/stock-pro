@@ -285,7 +285,7 @@ export default function StockDetailPage() {
                     {showChart && (
                         <div key={`chart-${symbol}`} className={clsx(
                             "relative bg-slate-900/30 overflow-hidden transition-all duration-300",
-                            isLandscape ? "flex-1 w-full border-b border-white/5" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6 mt-4"
+                            isLandscape ? "flex-1 w-full border-b border-white/5 min-h-[450px]" : "min-h-[400px] sm:min-h-[450px] md:min-h-[500px] h-auto border-y border-white/5 mx-6 rounded-2xl mb-6 mt-4"
                         )}>
                             <TradingViewChart
                                 data={candles}
