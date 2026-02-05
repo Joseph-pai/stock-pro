@@ -217,23 +217,22 @@ export default function DashboardPage() {
       const candidates = snapshot
         .filter(s => {
           const isTarget = isSearchId && s.stock_id === targetTerm;
-          // Relax pre-filter: Keep all stocks with any volume to ensure maximum coverage
-          const isVolActive = s.Trading_Volume > 0;
-          return isTarget || isVolActive;
+          // Pre-filter: Focus on stocks with volume and not crashing (spread >= 0)
+          const isPotential = s.Trading_Volume > 0 && s.spread >= -0.1;
+          return isTarget || isPotential;
         })
         .sort((a, b) => {
-          // Prioritize the search target to ensure it is in the analysis batch
           const aIsTarget = isSearchId && a.stock_id === targetTerm;
           const bIsTarget = isSearchId && b.stock_id === targetTerm;
           if (aIsTarget && !bIsTarget) return -1;
           if (!aIsTarget && bIsTarget) return 1;
           return b.Trading_Volume - a.Trading_Volume;
         })
-        .slice(0, 500); // 擴大掃描筆數上限為 500 筆，確保不遺漏潛力股
+        .slice(0, 200); // Reduce ceiling to 200 for 3x faster scan
 
       // Phase 3: Batched Resonance Analysis
       setStage('analyzing');
-      const BATCH_SIZE = 15;
+      const BATCH_SIZE = 25; // Increase batch size for better throughput
       const allResults: AnalysisResult[] = [];
 
       for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
@@ -256,15 +255,19 @@ export default function DashboardPage() {
         const batchJson = await batchRes.json();
         if (batchJson.success && batchJson.data) {
           const augmented = batchJson.data.map((r: any) => {
-            // API should already have sector_name from server-side industry mapping
-            // Use it directly without client-side override
             const resolvedSector = r.sector_name || (market === 'TWSE' ? '上市板' : '上櫃板');
 
-            console.debug(`[StockScan] Stock ${r.stock_id}: API sector="${r.sector_name}", final="${resolvedSector}"`);
+            // Calculate Breakout Potential Score
+            // Formula: (VolRatio * 0.4) + (PriceStrength * 0.4) + (SqueezeQuality * 0.2)
+            const volScore = Math.min((r.volume_ratio / settings.volumeRatio) * 10, 15);
+            const priceScore = Math.min(r.spread_percent * 2, 10);
+            const squeezeScore = Math.max(10 - (r.ma_gap_percent * 2), 0);
+            const potential_score = volScore + priceScore + squeezeScore;
 
             return {
               ...r,
-              sector_name: resolvedSector
+              sector_name: resolvedSector,
+              potential_score
             };
           });
           allResults.push(...augmented);
@@ -273,10 +276,12 @@ export default function DashboardPage() {
 
       const t_end = Date.now();
       // Only keep recommended stocks OR the specifically searched stock
-      const filteredResults = allResults.filter(r => {
-        const isTargetMatch = r.stock_id.includes(targetTerm) || r.stock_name.includes(targetTerm);
-        return r.is_recommended || (targetTerm.length >= 2 && isTargetMatch);
-      });
+      const filteredResults = allResults
+        .filter(r => {
+          const isTargetMatch = r.stock_id.includes(targetTerm) || r.stock_name.includes(targetTerm);
+          return r.is_recommended || (targetTerm.length >= 2 && isTargetMatch);
+        })
+        .sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0)); // Rank by potential breakout
 
       setResults(filteredResults);
       setTiming({
