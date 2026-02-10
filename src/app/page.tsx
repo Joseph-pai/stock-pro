@@ -4,7 +4,7 @@ import { StockCard } from '@/components/dashboard/StockCard';
 import { AnalysisResult, StockData } from '@/types';
 import { SECTORS, MarketType, MARKET_NAMES } from '@/lib/sectors';
 import { StockSearch } from '@/components/dashboard/StockSearch';
-import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info } from 'lucide-react';
+import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info, BookOpen, X, HelpCircle, AlertTriangle } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [isAnalyzingSingle, setIsAnalyzingSingle] = useState(false); // 新增單股分析狀態
+  const [showManual, setShowManual] = useState(false); // 新增使用說明狀態
 
   const [market, setMarket] = useState<MarketType>('TWSE');
   const [sector, setSector] = useState<string>('ALL');
@@ -323,6 +324,16 @@ export default function DashboardPage() {
         <h1 className="text-6xl md:text-7xl font-black bg-gradient-to-br from-white via-white to-blue-500 bg-clip-text text-transparent mb-8 tracking-tighter">
           爆發信號定位器
         </h1>
+
+        {/* 使用說明按鈕 */}
+        <button
+          onClick={() => setShowManual(true)}
+          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-blue-500/50 transition-all text-blue-400 font-black mb-10 group"
+        >
+          <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          使用說明 & 勝率分析
+        </button>
+
         <p className="text-slate-400 text-2xl font-black max-w-2xl mx-auto leading-relaxed">
           量能激增・均線糾結・技術突破<br />
           <span className="text-white/60 text-lg font-medium">三大信號完美重疊，定位噴出奇點。</span>
@@ -572,6 +583,109 @@ export default function DashboardPage() {
             </p>
           </div>
         </footer>
+      )}
+
+      {/* 使用說明 Modal */}
+      {showManual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 sm:p-12">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => setShowManual(false)}
+          />
+
+          {/* Modal Content */}
+          <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-[3rem] p-10 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <button
+              onClick={() => setShowManual(false)}
+              className="absolute top-8 right-8 p-3 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30">
+                <BookOpen className="w-8 h-8 text-blue-400" />
+              </div>
+              <h2 className="text-4xl font-black text-white">使用說明 & 戰略引導</h2>
+            </div>
+
+            <div className="space-y-10">
+              {/* 理論與實際 */}
+              <section className="space-y-5">
+                <div className="flex items-center gap-3 text-2xl font-black text-amber-400">
+                  <TrendingUp className="w-6 h-6" />
+                  <h3>勝率期望分析</h3>
+                </div>
+                <div className="bg-black/30 rounded-3xl p-8 border border-white/5 leading-relaxed">
+                  <div className="space-y-4">
+                    <p className="text-blue-400 font-bold mb-2">理論假設：</p>
+                    <p className="text-white text-2xl font-black italic">信號出現 → 大概率飆漲</p>
+
+                    <div className="mt-6 border-t border-white/10 pt-6">
+                      <p className="text-slate-500 font-bold mb-4">實際統計概況：</p>
+                      <ul className="space-y-4 text-xl font-black text-slate-300">
+                        <li className="flex items-start gap-3">
+                          <span className="text-emerald-400">✅</span>
+                          <span>可能飆漲：30 - 40% 機率</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <span className="text-amber-400">🟡</span>
+                          <span>小漲後回落：40% 機率</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <span className="text-rose-400">❌</span>
+                          <span>假突破下跌：20 - 30% 機率</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 使用策略 */}
+              <section className="space-y-5">
+                <div className="flex items-center gap-3 text-2xl font-black text-blue-400">
+                  <HelpCircle className="w-6 h-6" />
+                  <h3>💡 如何更好地使用這個 APP</h3>
+                </div>
+                <div className="grid gap-4">
+                  {[
+                    { title: "當作「雷達」而非「GPS」", desc: "它告訴你哪裡有動靜，但不代表目的地一定在那裡。" },
+                    { title: "搭配多維度判斷", desc: "篩選出標的後，仍需手動診斷該股所屬產業趨勢與大盤環境。" },
+                    { title: "嚴格執行停損", desc: "即使信號完美，一旦跌破關鍵支撐或進場價 5-8% 必須切斷風險。" },
+                    { title: "分散佈局策略", desc: "切忌孤注一擲，應將資金分配在多支不同類別的信號共振股。" }
+                  ].map((item, i) => (
+                    <div key={i} className="flex gap-5 p-6 bg-slate-800/50 rounded-2xl border border-white/5">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-black">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <h4 className="text-xl font-black text-white mb-1">{item.title}</h4>
+                        <p className="text-slate-400 font-medium">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* 總結 */}
+              <div className="p-8 bg-blue-500/10 rounded-[2.5rem] border-2 border-blue-500/20">
+                <div className="flex items-center gap-3 mb-4">
+                  <Info className="w-6 h-6 text-blue-400" />
+                  <p className="text-blue-400 text-2xl font-black">核心總結</p>
+                </div>
+                <p className="text-slate-300 text-xl font-bold leading-relaxed">
+                  這個 APP 是一個強大的<span className="text-white underline underline-offset-4 decoration-blue-500">「飆股候選篩選器」</span>，旨在極速縮小搜索範圍，提高選股效率。但在金融市場，信號不等於預測。
+                </p>
+                <div className="mt-6 flex items-center gap-2 p-3 bg-blue-500/20 rounded-xl border border-blue-500/30">
+                  <span className="text-blue-400">✨</span>
+                  <p className="text-blue-100 font-black">APP 的使命是：讓機率站在你這一邊。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
