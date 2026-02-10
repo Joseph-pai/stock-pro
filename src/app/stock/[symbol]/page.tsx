@@ -206,6 +206,7 @@ export default function StockDetailPage() {
                                 value={`${data.v_ratio.toFixed(1)}x`}
                                 active={data.v_ratio >= 3}
                                 color="amber"
+                                description="當前成交量與過去 5 日均量比值，反映動能介入強度。"
                             />
                             <ResonanceCard
                                 icon={<TrendingUp className="w-5 h-5" />}
@@ -213,6 +214,7 @@ export default function StockDetailPage() {
                                 value="爆發前兆"
                                 active={data.is_ma_breakout}
                                 color="emerald"
+                                description="價格帶量突破關鍵壓力或均線，確認多頭趨勢啟動。"
                             />
                             <ResonanceCard
                                 icon={<Zap className="w-5 h-5" />}
@@ -220,6 +222,7 @@ export default function StockDetailPage() {
                                 value="強烈壓縮"
                                 active={data.is_ma_aligned}
                                 color="purple"
+                                description="短中長期均線收斂糾結，預示即將發生方向性大爆發。"
                             />
                             <ResonanceCard
                                 icon={<ShieldCheck className="w-5 h-5" />}
@@ -227,6 +230,7 @@ export default function StockDetailPage() {
                                 value="極高概率"
                                 active={true}
                                 color="blue"
+                                description="結合籌碼集中度與基本面成長，提供高勝率操作信心。"
                             />
                         </div>
 
@@ -275,7 +279,10 @@ export default function StockDetailPage() {
                     isLandscape ? "w-full h-full overflow-y-auto" : ""
                 )}>
                     {/* Chart Section with Toggle - Cleaned up to ensure clickability */}
-                    <div className="px-6 py-6 flex items-center justify-between border-b border-white/5 bg-slate-900/40 relative z-30">
+                    <div className={clsx(
+                        "py-6 flex items-center justify-between border-b border-white/5 bg-slate-900/40 relative z-30",
+                        isLandscape ? "pl-28 pr-6" : "px-6"
+                    )}>
                         <div className="flex flex-col">
                             <h3 className="text-lg font-black text-slate-300 flex items-center gap-2">
                                 <LineChart className="w-5 h-5 text-blue-400" />
@@ -342,6 +349,7 @@ export default function StockDetailPage() {
                                     value={`${data.v_ratio.toFixed(1)}x`}
                                     active={data.v_ratio >= 3}
                                     color="amber"
+                                    description="當前成交量與過去 5 日均量比值，反映動能介入強度。"
                                 />
                                 <ResonanceCard
                                     icon={<TrendingUp className="w-5 h-5" />}
@@ -349,6 +357,7 @@ export default function StockDetailPage() {
                                     value="爆發前兆"
                                     active={data.is_ma_breakout}
                                     color="emerald"
+                                    description="價格帶量突破關鍵壓力或均線，確認多頭趨勢啟動。"
                                 />
                                 <ResonanceCard
                                     icon={<Zap className="w-5 h-5" />}
@@ -356,6 +365,7 @@ export default function StockDetailPage() {
                                     value="強烈壓縮"
                                     active={data.is_ma_aligned}
                                     color="purple"
+                                    description="短中長期均線收斂糾結，預示即將發生方向性大爆發。"
                                 />
                                 <ResonanceCard
                                     icon={<ShieldCheck className="w-5 h-5" />}
@@ -363,6 +373,7 @@ export default function StockDetailPage() {
                                     value="極高概率"
                                     active={true}
                                     color="blue"
+                                    description="結合籌碼集中度與基本面成長，提供高勝率操作信心。"
                                 />
                             </div>
                         )}
@@ -585,7 +596,7 @@ function LoaderComponent() {
     );
 }
 
-function ResonanceCard({ icon, title, value, active, color }: { icon: any, title: string, value: string, active: boolean, color: string }) {
+function ResonanceCard({ icon, title, value, active, color, description }: { icon: any, title: string, value: string, active: boolean, color: string, description: string }) {
     const colors = {
         amber: active ? "text-amber-400 border-amber-500/30 bg-amber-500/5 shadow-amber-500/10" : "text-slate-600 border-slate-800",
         emerald: active ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 shadow-emerald-500/10" : "text-slate-600 border-slate-800",
@@ -598,9 +609,10 @@ function ResonanceCard({ icon, title, value, active, color }: { icon: any, title
             "p-5 rounded-3xl border-2 transition-all flex items-center justify-between shadow-xl",
             colors[color as keyof typeof colors]
         )}>
-            <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">{title}</span>
-                <span className="text-lg font-black">{value}</span>
+            <div className="flex flex-col flex-1 mr-4">
+                <span className="text-xl font-black uppercase tracking-tight mb-1">{title}</span>
+                <span className="text-2xl font-black mb-2">{value}</span>
+                <p className="text-[10px] font-bold opacity-70 leading-relaxed">{description}</p>
             </div>
             <div className={clsx(
                 "p-2 rounded-xl transition-all",
