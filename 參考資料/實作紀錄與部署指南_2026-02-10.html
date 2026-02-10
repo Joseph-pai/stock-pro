@@ -1,347 +1,544 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>實作紀錄與部署指南 (2026-02-10)</title>
+    <title>台股爆發預警系統 - 核心實作紀錄備份 (2026-02-10)</title>
+    <!-- Mermaid for Flowcharts -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
     <style>
         :root {
             --primary: #3b82f6;
+            --secondary: #a855f7;
             --bg: #0f172a;
             --card-bg: rgba(30, 41, 59, 0.7);
             --text: #f1f5f9;
             --text-dim: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
+            --code-bg: #1e293b;
         }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             line-height: 1.6;
             margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
             padding: 40px 20px;
         }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
+
         header {
             text-align: center;
             margin-bottom: 60px;
+            padding: 40px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(168, 85, 247, 0.1));
+            border-radius: 40px;
+            border: 1px solid var(--border);
         }
+
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             background: linear-gradient(to right, #60a5fa, #a855f7);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
+            margin: 0 0 10px 0;
+            letter-spacing: -1px;
         }
-        .date-tag {
+
+        .date-badge {
             display: inline-block;
-            padding: 4px 12px;
+            padding: 6px 16px;
             background: rgba(59, 130, 246, 0.2);
             border: 1px solid var(--primary);
-            border-radius: 20px;
+            border-radius: 30px;
             color: var(--primary);
             font-size: 0.9rem;
-            font-weight: bold;
+            font-weight: 800;
+            text-transform: uppercase;
         }
+
         nav {
-            background: var(--card-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 40px;
             position: sticky;
             top: 20px;
-            z-index: 100;
+            z-index: 1000;
+            margin-bottom: 40px;
         }
+
         nav ul {
             list-style: none;
-            padding: 0;
+            padding: 10px;
             margin: 0;
             display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
             justify-content: center;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
+
         nav a {
             color: var(--text-dim);
             text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 40px;
+            transition: all 0.2s;
         }
-        nav a:hover {
-            color: var(--primary);
+
+        nav a:hover,
+        nav a.active {
+            color: white;
+            background: var(--primary);
         }
+
         section {
             background: var(--card-bg);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(16px);
             border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 40px;
-            margin-bottom: 40px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border-radius: 32px;
+            padding: 50px;
+            margin-bottom: 50px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
         }
+
         h2 {
-            border-bottom: 2px solid var(--primary);
-            padding-bottom: 10px;
-            margin-top: 0;
+            font-size: 1.8rem;
             color: var(--primary);
+            margin-top: 0;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
-        pre {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 20px;
-            border-radius: 12px;
-            overflow-x: auto;
-            font-family: 'Fira Code', 'Courier New', monospace;
-            font-size: 0.9rem;
-            border: 1px solid var(--border);
-            white-space: pre-wrap;
+
+        h2::before {
+            content: "";
+            display: block;
+            width: 4px;
+            height: 24px;
+            background: var(--primary);
+            border-radius: 2px;
         }
-        .md-content {
+
+        h3 {
+            color: #60a5fa;
+            margin-top: 40px;
+        }
+
+        h4 {
+            color: #94a3b8;
             margin-top: 20px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
         }
-        footer {
-            text-align: center;
-            color: var(--text-dim);
-            font-size: 0.8rem;
-            margin-top: 60px;
-        }
+
+        /* Tables */
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
+            margin: 25px 0;
+            font-size: 0.95rem;
         }
-        th, td {
+
+        th,
+        td {
             text-align: left;
-            padding: 12px;
+            padding: 16px;
             border-bottom: 1px solid var(--border);
         }
+
         th {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(59, 130, 246, 0.1);
             color: var(--primary);
+            font-weight: 700;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Code Blocks */
+        pre {
+            background: var(--code-bg);
+            padding: 24px;
+            border-radius: 16px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            margin: 20px 0;
+            position: relative;
+        }
+
+        code {
+            color: #e2e8f0;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 20px;
+            border-radius: 16px;
+            margin: 20px 0;
+            border-left: 5px solid;
+        }
+
+        .alert-important {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--primary);
+            color: #93c5fd;
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: #f59e0b;
+            color: #fcd34d;
+        }
+
+        .alert-tip {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: #10b981;
+            color: #6ee7b7;
+        }
+
+        /* Mermaid Diagrams */
+        .mermaid {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 16px;
+            margin: 30px 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Checkboxes */
+        .task-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary);
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .checkbox.checked {
+            background: var(--primary);
+        }
+
+        .checkbox.checked::after {
+            content: "✓";
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        footer {
+            text-align: center;
+            opacity: 0.5;
+            font-size: 0.8rem;
+            padding: 40px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Diff Highlighting */
+        .diff-add {
+            color: #4ade80;
+            background: rgba(74, 222, 128, 0.1);
+        }
+
+        .diff-remove {
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.1);
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>實作紀錄與部署指南</h1>
-            <div class="date-tag">2026-02-10 存檔</div>
+            <h1>核心實作紀錄備份</h1>
+            <div class="date-badge">整合日期：2026-02-10</div>
+            <p style="color: var(--text-dim); margin-top: 15px;">此文件為完整的實施計劃、技術指南與任務清單之高保真備份，包含所有圖表與表格內容。</p>
         </header>
 
         <nav>
             <ul>
-                <li><a href="#summary">今日總結</a></li>
-                <li><a href="#walkthrough">完成報告</a></li>
-                <li><a href="#netlify">Netlify 部署指南</a></li>
-                <li><a href="#plan">實作計劃</a></li>
-                <li><a href="#task">任務清單</a></li>
+                <li><a href="#redis-plan">Redis 全局緩存</a></li>
+                <li><a href="#netlify-guide">Netlify 部署指南</a></li>
+                <li><a href="#logic-plan">選股邏輯強化</a></li>
+                <li><a href="#task-list">任務清單檢核</a></li>
             </ul>
         </nav>
 
-        <section id="summary">
-            <h2>1. 今日總結 (RECORDS_2026-02-10.md)</h2>
-            <div class="md-content">
-                <pre># 飆股選股邏輯強化 — 實作紀錄 (2026-02-10)
+        <!-- 1. Redis Implementation Plan -->
+        <section id="redis-plan">
+            <h2>1. 系統進階方案：導入 Redis 全局緩存實施計劃</h2>
+            <p>本計劃旨在探討如何透過導入 Redis 將系統從「客戶端分段暫存」升級為「服務端全局緩存」，以極大化數據讀取速度並降低外部 API 負擔。</p>
 
-本文件整合了今日針對「飆股選股邏輯強化」任務的所有相關紀錄，包含實作計劃、任務清單與完成報告。
+            <h3>核心目標</h3>
+            <ul>
+                <li><strong>消除網路延時</strong>：將數據抓取延遲從 500ms+ 降低至 20ms 以內。</li>
+                <li><strong>節省 API 配額</strong>：減少對 FinMind、TWSE 等外部資源的重複請求。</li>
+                <li><strong>全局共享</strong>：實現不同設備（手機、電腦）間的緩存共享。</li>
+                <li><strong>預熱機制</strong>：開盤前自動準備數據，實現秒級掃描。</li>
+            </ul>
 
----
+            <h3>緩存鍵 (Key) 設計架構</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>數據類型</th>
+                        <th>Redis Key 範例</th>
+                        <th>TTL (過期時間)</th>
+                        <th>說明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>市場快照</strong></td>
+                        <td><code>tsbs:snap:{mkt}:{sector}</code></td>
+                        <td>1 小時</td>
+                        <td>存放 TWSE/TPEX 類股快照</td>
+                    </tr>
+                    <tr>
+                        <td><strong>歷史 K 線</strong></td>
+                        <td><code>tsbs:hist:{symbol}</code></td>
+                        <td>24 小時</td>
+                        <td>存放個股歷史交易數據</td>
+                    </tr>
+                    <tr>
+                        <td><strong>AI 分析</strong></td>
+                        <td><code>tsbs:ai:{symbol}:{date}</code></td>
+                        <td>12 小時</td>
+                        <td>存放昂貴的 AI 深度分析結果</td>
+                    </tr>
+                    <tr>
+                        <td><strong>產業映射</strong></td>
+                        <td><code>tsbs:map:industry</code></td>
+                        <td>7 天</td>
+                        <td>變動頻率極低的映射表</td>
+                    </tr>
+                </tbody>
+                </tbody>
+            </table>
 
-## 1. 實作計劃 (Implementation Plan)
+            <h3>資料流邏輯 (Read-Aside Pattern)</h3>
+            <div class="mermaid">
+                graph TD
+                A[API 請求檢索] --> B{檢查 Redis 緩存}
+                B -- 命中 (Hit) --> C[回傳 Redis 數據]
+                B -- 未命中 (Miss) --> D[調用外部 API 抓取]
+                D --> E[寫入 Redis 並設 TTL]
+                E --> F[回傳 最新數據]
+            </div>
 
-### 改進 1：延長 VRatio 基線期（5天 → 20天）
-將 `calculateVRatio()` 的基線期從前 5 天改為前 20 天，以獲得更穩定的「平日均量」參考點。
-
-### 改進 2：新增融資融券軋空信號
-利用 FinMind API 獲取融資融券數據，判斷「融資溫和增加 + 股價同步上升」的軋空動能。
-
-### 改進 3：新增跳空缺口（Gap Up）判斷
-判斷「今日最低 > 昨日最高」的起跳信號。
-
-### 改進 4：月營收「創近期新高」判斷
-分析月營收絕對值，確認是否為近 6 個月新高。
-
-### 改進 5：五維評分權重調整
-- 量能激增：30 分
-- 均線糾結：22 分
-- 籌碼集中：22 分
-- 融資軋空：11 分
-- 基本面：15 分
-
----
-
-## 2. 任務清單 (Task Checklist)
-
-- [x] **延長 VRatio 基線期**
-- [x] **新增融資融券軋空信號** (含 API 整合與 Redis 快取)
-- [x] **新增跳空缺口判斷**
-- [x] **新增月營收創近期新高判斷**
-- [x] **更新評分權重與 UI 展示** (含 StockCard Tag 與首頁 Modal)
-- [x] **上櫃數據同步優化**
-- [x] **品牌與版權聲明更新** (五維評分引擎 V8.2 | Joseph PAI @2026)
-
----
-
-## 3. 完成報告 (Full Walkthrough)
-
-### 修改摘要
-根據理論框架分析出的差距，完成了 **5 項改進**，涉及 **5 個檔案**。
-
-### 修改內容
-
-#### 1. VRatio 基線延長（5天 → 20天）
-**效果**：對比「平日量」的基線更穩定，避免近幾天放量導致 VRatio 被稀釋。支持 graceful fallback。
-
-#### 2. 融資融券軋空信號（全新功能）
-- **finmind.ts**: 新增 `getMarginTrading()` 方法
-- **engine.ts**: 新增 `checkMarginSqueezeSignal()`
-- **scanner.ts**: 整合融資數據獲取
-
-**邏輯**：近 5 日融資餘額穩定增加 + 股價同步上升 → 觸發 `MARGIN_SQUEEZE` 標籤。
-
-#### 3. 跳空缺口判斷（全新功能）
-**邏輯**：`今日最低 > 昨日最高` → 觸發 `GAP_UP` 標籤。
-
-#### 4. 月營收創近期新高
-**邏輯**：最新月營收 ≥ 近 6 個月最高值 → 觸發 `REVENUE_NEW_HIGH` 標籤。
-
-#### 5. 五維評分與 UI
-**新權重**：量能激增 (30)、均線糾結 (22)、籌碼集中 (22)、融資軋空 (11)、基本面 (15)。
-
-#### 6. 首頁「使用說明 & 勝率分析」
-功能：彈出深色磨砂玻璃質感的彈窗，包含勝率分析與戰略引導。
-
-#### 7. 最終細節優化與品牌更新
-提示語修改：「沒有找到符合條件的股票，請明天再試」；頁尾更新：「五維評分引擎 V8.2 | Joseph PAI @2026」。
-
----
-*紀錄日期：2026-02-10*
-*紀錄生成：Antigravity AI*</pre>
+            <div class="alert alert-tip">
+                <strong>性能提升</strong>：對於使用者來說，掃描 200 支股票的等待時間將從「感覺有在跑」變成「瞬間完成」。<br>
+                <strong>穩定性</strong>：即使外部 API 暫時當機，只要 Redis 內有緩存，系統依然能提供正常的數據服務。
             </div>
         </section>
 
-        <section id="walkthrough">
-            <h2>2. 完成報告 (walkthrough.md)</h2>
-            <div class="md-content">
-                <pre># 飆股選股邏輯強化 — 完成報告
+        <!-- 2. Netlify Deployment Guide -->
+        <section id="netlify-guide">
+            <h2>2. Netlify 部署調整指南 (針對 Redis 緩存)</h2>
+            <p>由於 Netlify 是基於 Serverless Functions 的架構，部署時需要注意以下關鍵點以確保 Redis 緩存正常運作：</p>
 
-## 修改摘要
-根據理論框架分析出的差距，完成了 5 項改進，涉及 5 個檔案。
+            <h3>1. 外部 Redis 服務 (必要)</h3>
+            <p>Netlify 的伺服器本身不提供 Redis。您需要一個外部的 Redis 實例：</p>
+            <ul>
+                <li><strong>建議服務</strong>：<strong>Upstash</strong> (專為 Serverless 設計)。</li>
+                <li><strong>優點</strong>：支持透過 HTTP 調用且具備極佳的連結管理機制。</li>
+            </ul>
 
-## 修改內容
-### 1. VRatio 基線延長（5天 → 20天）
-效果：對比「平日量」的基線更穩定，避免近幾天放量導致 VRatio 被稀釋。支持 graceful fallback。
+            <h3>2. Vercel KV 操作步驟 (獲取 Redis URL)</h3>
+            <ol>
+                <li><strong>登入 Vercel</strong> 並連結 GitHub 倉庫。</li>
+                <li>點擊頂部的 <strong>Storage</strong> 分頁，建立一個 <strong>KV Database</strong>。</li>
+                <li>選擇區域 (例如 <strong>Washington, D.C. (us-east-1)</strong>)。</li>
+                <li>在 KV 儀表板中，複製 <code>REDIS_URL</code> 連結字串。</li>
+            </ol>
 
-### 2. 融資融券軋空信號（全新功能）
-邏輯：近 5 日融資餘額穩定增加 + 股價同步上升 → 觸發 MARGIN_SQUEEZE 標籤。
+            <h3>3. Netlify 環境變數設置</h3>
+            <p>在 Netlify 的 <strong>Site Settings > Build & deploy > Environment variables</strong> 中添加：</p>
+            <table>
+                <tr>
+                    <th>變數名稱</th>
+                    <th>值</th>
+                </tr>
+                <tr>
+                    <td><code>REDIS_URL</code></td>
+                    <td>填入外部 Redis 的連結字串 (格式: <code>redis://default:password@host:port</code>)</td>
+                </tr>
+                <tr>
+                    <td><code>NEXT_PUBLIC_FINMIND_TOKEN</code></td>
+                    <td>您的 FinMind API Key</td>
+                </tr>
+            </table>
 
-### 3. 跳空缺口判斷（全新功能）
-邏輯：今日最低 > 昨日最高 → 觸發 GAP_UP 標籤，並在 analysisHints 中顯示缺口幅度。
-
-### 4. 月營收創近期新高
-邏輯：最新月營收 ≥ 近 6 個月最高值 → 觸發 REVENUE_NEW_HIGH 標籤，額外加 3 分。
-
-### 5. 五維評分與 UI
-更新權重（滿分 100）：量能 30, 均線 22, 籌碼 22, 融資 11, 基本面 15。
-
-### 6. 首頁「使用說明 & 勝率分析」
-功能：新增 Modal 彈窗，包含理論與實際差距分析、雷達與 GPS 策略引導。
-
-### 7. 最終細節優化與品牌更新
-修改提示語為「沒有找到符合條件的股票，請明天再試」；更新版權聲明為 Joseph PAI @2026。
-
-## 驗證與部署
-- ✅ npm run build 通過
-- ✅ GitHub 推送至 main 分支
-- ✅ 上櫃市場支持確認</pre>
+            <div class="alert alert-warning">
+                <strong>靜態預渲染限制</strong>：由於 API 現在依賴數據庫連結，如果您在編譯期 (<code>npm run build</code>) 就需要抓取數據，請確保編譯環境也能訪問到
+                Redis。
             </div>
         </section>
 
-        <section id="netlify">
-            <h2>3. Netlify 部署指南 (netlify_deployment_guide.md)</h2>
-            <div class="md-content">
-                <pre># Netlify 部署調整指南 (針對 Redis 緩存)
+        <!-- 3. Implementation Plan -->
+        <section id="logic-plan">
+            <h2>3. 飆股選股邏輯強化計劃</h2>
+            <p>本計劃針對現有系統與理論框架的差距，實施核心算法與評分機制的全面升級。</p>
 
-由於 Netlify 是基於 Serverless Functions 的架構，部署時需要注意以下幾點：
-
-## 1. 外部 Redis 服務 (必要)
-Netlify 本身不提供 Redis。建議使用 Upstash (專為 Serverless 設計)。
-
-## 2. Vercel KV 詳細操作步驟
-1. 登入 Vercel 並建立 KV 數據庫。
-2. 選擇區域 (建議 us-east-1)。
-3. 獲取 REDIS_URL 連結字串。
-
-## 3. Netlify 環境變數設置
-在 Netlify 的 Site Settings 中添加：
-- REDIS_URL：外部 Redis 的連結字串。
-- 其他 API Key (如 FinMind)。
-
-## 4. 代碼優化建議
-ioredis 在 Serverless 環境中需注意連結數限制。未來可考慮更換為 @upstash/redis (HTTP 協議)。
-
-## 5. 靜態預渲染限制
-若編譯期需抓取數據，請確保編譯環境能訪問到 Redis。</pre>
+            <div class="alert alert-important">
+                <strong>改動幅度</strong>：本計劃涉及核心選股評分邏輯的修改（權重調整），會直接影響掃描結果的排序與精準度。
             </div>
+
+            <h3>主要改進內容</h3>
+
+            <h4>改進 1：延長 VRatio 基線期（5 天 → 20 天）</h4>
+            <p>原因：避免近期放量稀釋比率，採用 20 天均量更能代表「平日常態量」。</p>
+            <pre><code>export function calculateVRatio(volumes: number[]): number {
+<span class="diff-remove">-    if (volumes.length < 5) return 0;</span>
+<span class="diff-add">+    if (volumes.length < 21) return 0;</span>
+    const observationAvg = volumes[volumes.length - 1];
+<span class="diff-add">+    const baselineVolumes = volumes.slice(-21, -1);</span>
+    const baselineAvg = baselineVolumes.reduce((a, b) => a + b, 0) / baselineVolumes.length;
+    return baselineAvg === 0 ? 0 : observationAvg / baselineAvg;
+}</code></pre>
+
+            <h4>改進 2：新增融資融券軋空信號</h4>
+            <p>原因：滿足理論中「融資溫和增加但股價穩定上升」的軋空動能判斷。</p>
+            <ul>
+                <li>整合 FinMind <code>TaiwanStockMarginPurchaseShortSale</code> 數據。</li>
+                <li>實施 <code>checkMarginSqueezeSignal</code> 核心函數。</li>
+            </ul>
+
+            <h4>改進 3：新增跳空缺口 (Gap Up) 與營收新高</h4>
+            <ul>
+                <li><strong>跳空缺口</strong>：今日最低盤價 > 昨日最高盤價。</li>
+                <li><strong>月營收新高</strong>：最新一期營收為近 6 個月之冠，額外增加基本面加分。</li>
+            </ul>
+
+            <h4>改進 4：五維評分權重調整</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>維度</th>
+                        <th>權重 %</th>
+                        <th>說明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>量能激增 (Volume)</td>
+                        <td>30%</td>
+                        <td>VRatio 當日爆發力</td>
+                    </tr>
+                    <tr>
+                        <td>均線糾結 (Squeeze)</td>
+                        <td>22%</td>
+                        <td>整理區間緊實度</td>
+                    </tr>
+                    <tr>
+                        <td>籌碼集中 (Chips)</td>
+                        <td>22%</td>
+                        <td>法人買盤連續性</td>
+                    </tr>
+                    <tr>
+                        <td>融資軋空 (Margin)</td>
+                        <td>11%</td>
+                        <td>散戶/軋空動能</td>
+                    </tr>
+                    <tr>
+                        <td>基本面 (Fund.)</td>
+                        <td>15%</td>
+                        <td>營收 YoY/MoM 與新高</td>
+                    </tr>
+                </tbody>
+            </table>
         </section>
 
-        <section id="plan">
-            <h2>4. 實作計劃 (implementation_plan.md)</h2>
-            <div class="md-content">
-                <pre># 飆股選股邏輯強化計劃
-
-## Proposed Changes
-
-### 改進 1：延長 VRatio 基線期
-原因：5 天太短，易受近期波動影響。改為 20 天以代表常態量能。
-
-### 改進 2：新增融資融券軋空信號
-原因：理論要求判斷軋空動能。新增 getMarginTrading 並在系統中整合。
-
-### 改進 3：新增跳空缺口判斷
-原因：跳空是強力起跑信號，目前系統未偵測。
-
-### 改進 4：月營收「創近期新高」判斷
-原因：由相對成長轉向絕對值新高判斷，符合理論要求。
-
-### 改進 5：調整評分權重與 UI 展示
-重新分配權重，加入融資與跳空評分項。
-
-## Verification Plan
-1. Build 驗證：npm run build
-2. 單股驗證：測試台積電 (2330)
-3. 全市場掃描驗證</pre>
-            </div>
-        </section>
-
-        <section id="task">
-            <h2>5. 任務清單 (task.md)</h2>
-            <div class="md-content">
-                <pre># 飆股選股邏輯強化任務
-
-## 改進項目
-- [x] 1. 延長 VRatio 基線期：5 天 → 20 天
-- [x] 2. 新增融資融券軋空信號 (FinMind & 邏輯整合)
-- [x] 3. 新增跳空缺口判斷
-- [x] 4. 新增月營收「創近期新高」判斷
-- [x] 5. 更新評分權重與 UI 展示 (StockCard & Modal)
-- [x] 6. 上櫃市場兼容性優化
-- [x] 7. 品牌與版權聲明更新
-
-## 驗證
-- [x] npm run build 通過
-- [x] GitHub 推送完成
-- [x] 代碼邏輯靜態檢查通過</pre>
-            </div>
+        <!-- 4. Task Checklist -->
+        <section id="task-list">
+            <h2>4. 任務清單檢核表 (Task Checklist)</h2>
+            <ul class="task-list">
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 延長 VRatio 基線期：5 天 → 20 天
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 新增融資融券軋空信號 (FinMind API 整合)
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 實作 Redis 緩存數據流整合 (4H TTL)
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 新增跳空缺口 (Gap Up) 偵測邏輯
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 實作月營收「創近期新高」檢查
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 調整五維評分系統 (30/22/22/11/15)
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 前端 UI：新增 MARGIN_SQUEEZE/GAP_UP 等標籤
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 首頁全域 Modal：新增使用說明與勝率分析
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 品牌聲明：更新為「五維評分引擎 V8.2」
+                </li>
+                <li class="task-item">
+                    <div class="checkbox checked"></div> 版權聲明：Joseph PAI @2026
+                </li>
+            </ul>
         </section>
 
         <footer>
-            分析與實作由 Antigravity AI 協助完成 | Joseph PAI @2026 所有權利保留
+            備份文件由 Antigravity AI 生成 | 數據來源於本專案之 Brain Artifacts | Joseph PAI @2026 所有權利保留
         </footer>
     </div>
+
+    <script>
+        // Smooth scrolling for navigation
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+                document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
 </body>
+
 </html>
