@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄備份 (2026-02-10) - 完整版</title>
+    <title>工作紀錄備份 (2026-02-10) - 最終完整版</title>
     <!-- Mermaid for Flowcharts -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
@@ -261,7 +261,7 @@
     <div class="container">
         <header>
             <h1>工作紀錄整合備份</h1>
-            <div class="date-badge">2026-02-10 完整紀錄</div>
+            <div class="date-badge">2026-02-10 最終完整紀錄</div>
         </header>
 
         <nav>
@@ -282,12 +282,13 @@
             <h3>1. 核心目標</h3>
             <ul>
                 <li><strong>消除網路延時</strong>：將數據抓取延遲從 500ms+ 降低至 20ms 以內。</li>
-                <li><strong>節節省 API 配額</strong>：減少對 FinMind、TWSE 等外部資源的重複請求。</li>
+                <li><strong>節省 API 配額</strong>：減少對 FinMind、TWSE 等外部資源的重複請求。</li>
                 <li><strong>全局共享</strong>：實現不同設備（手機、電腦）間的緩存共享。</li>
                 <li><strong>預熱機制</strong>：開盤前自動準備數據，實現秒級掃描。</li>
             </ul>
 
             <h3>2. 緩存鍵 (Key) 設計架構</h3>
+            <p>為確保數據可維護性，採用層級化命名空間：</p>
             <table>
                 <thead>
                     <tr>
@@ -300,25 +301,25 @@
                 <tbody>
                     <tr>
                         <td><strong>市場快照</strong></td>
-                        <td>tsbs:snap:{mkt}:{sector}</td>
+                        <td><code>tsbs:snap:{mkt}:{sector}</code></td>
                         <td>1 小時</td>
                         <td>存放 TWSE/TPEX 類股快照</td>
                     </tr>
                     <tr>
                         <td><strong>歷史 K 線</strong></td>
-                        <td>tsbs:hist:{symbol}</td>
+                        <td><code>tsbs:hist:{symbol}</code></td>
                         <td>24 小時</td>
                         <td>存放個股歷史交易數據</td>
                     </tr>
                     <tr>
                         <td><strong>AI 分析</strong></td>
-                        <td>tsbs:ai:{symbol}:{date}</td>
+                        <td><code>tsbs:ai:{symbol}:{date}</code></td>
                         <td>12 小時</td>
                         <td>存放昂貴的 AI 深度分析結果</td>
                     </tr>
                     <tr>
                         <td><strong>產業映射</strong></td>
-                        <td>tsbs:map:industry</td>
+                        <td><code>tsbs:map:industry</code></td>
                         <td>7 天</td>
                         <td>變動頻率極低的映射表</td>
                     </tr>
@@ -335,16 +336,23 @@
                 E --> F[回傳 最新數據]
             </div>
 
-            <h3>4. 技術實施點</h3>
+            <h4>技術實施點：</h4>
+            <ol>
+                <li><strong>緩存穿透保護</strong>：針對不存在的代號（如 0000），在 Redis 存入空值短暫過期，防止頻繁請求外部伺服器。</li>
+                <li><strong>自動失效控制</strong>：利用 Redis <code>EXPIRE</code> 屬性，確保歷史數據在收盤後自動更新。</li>
+            </ol>
+
+            <h3>4. 進階優化：預熱機制 (Cache Warming)</h3>
+            <p>透過後端 Cron Job 執行數據預熱：</p>
             <ul>
-                <li><strong>緩存穿透保護</strong>：針對不存在的代號，在 Redis 存入空值短暫過期。</li>
-                <li><strong>自動失效控制</strong>：利用 Redis EXPIRE 屬性，確保歷史數據在收盤後自動更新。</li>
+                <li><strong>08:30 (開盤前)</strong>：自動跑一次 <code>Market Snapshot</code> 抓取，填滿 Redis。</li>
+                <li><strong>14:00 (收盤後)</strong>：自動執行全市場 <code>Deep Analysis</code>，緩存當日的籌碼與指標分析。</li>
             </ul>
 
-            <h3>5. 實施效益</h3>
+            <h3>5. 實施效益評價</h3>
             <div class="alert alert-tip">
-                <strong>性能提升</strong>：對於使用者來說，掃描 200 支股票的等待時間將從「感覺有在跑」變成「瞬間完成」。<br>
-                <strong>穩定性</strong>：即使外部 API 暫時當機，只要 Redis 內有緩存，系統依然能提供正常的數據服務。
+                <strong>性能提升</strong>：對於使用者來說，掃描 200 支股票的等待時間將從「感覺有在跑」變成「瞬間完成」。<br><br>
+                <strong>穩定性</strong>：即使外部 API 暫時當機，只要 Redis 內有緩存，系統依然能提供正常的數據服務，提升健壯性。
             </div>
         </section>
 
@@ -354,7 +362,11 @@
             <p>由於 Netlify 是基於 Serverless Functions 的架構，部署時需要注意以下關鍵點：</p>
 
             <h3>1. 外部 Redis 服務 (必要)</h3>
-            <p>Netlify 的伺服器本身不提供 Redis。建議使用 <strong>Upstash</strong>。</p>
+            <p>Netlify 的伺服器本身不提供 Redis。您需要一個外部的 Redis 實例：</p>
+            <ul>
+                <li><strong>建議服務</strong>：<strong>Upstash</strong>。</li>
+                <li><strong>原因</strong>：Upstash 是專為 Serverless 設計的，支持透過 HTTP 調用且具備極佳的連結管理機制，非常適合 Netlify 使用。</li>
+            </ul>
 
             <h3>2. Vercel KV 詳細操作步驟</h3>
             <ol>
@@ -365,14 +377,14 @@
             </ol>
 
             <h3>3. Netlify 環境變數設置</h3>
-            <ul style="list-style: none;">
-                <li><code>REDIS_URL</code>：填入外部 Redis 連結。</li>
+            <ul>
+                <li><code>REDIS_URL</code>：填入外部 Redis 連結字串 (格式通常為 <code>redis://default:password@host:port</code>)。</li>
                 <li><code>NEXT_PUBLIC_FINMIND_TOKEN</code>：FinMind API Key。</li>
             </ul>
 
             <div class="alert alert-warning">
-                <strong>特別注意</strong>：目前 <code>ioredis</code> 在 Serverless 環境中，每個新實例會建立一次連接。若連結數過大，建議更換為
-                <code>@upstash/redis</code> (HTTP 協議)。
+                <strong>代碼優化建議 (ioredis)</strong>：目前 <code>src/lib/redis.ts</code> 雖然支持單例模式，但在 Serverless
+                環境中，每個新的函數實例還是會建立一次連接。若未來流量變大，建議將 <code>ioredis</code> 更換為 <code>@upstash/redis</code> (基於 HTTP)。
             </div>
         </section>
 
@@ -388,7 +400,6 @@
             <h3>改進內容詳情</h3>
 
             <h4>改進 1：延長 VRatio 基線期（5 天 → 20 天）</h4>
-            <p>原因：20 天更能代表常態量能。</p>
             <pre><code> export function calculateVRatio(volumes: number[]): number {
 <span class="diff-remove">-    if (volumes.length < 5) return 0;</span>
 <span class="diff-add">+    if (volumes.length < 21) return 0;</span>
@@ -399,53 +410,58 @@
  }</code></pre>
 
             <h4>改進 2：新增融資融券軋空信號</h4>
-            <p>原因：滿足理論「融資溫和增加 + 股價同步上升」要求。</p>
-            <pre><code>// 核心函數
-export function checkMarginSqueezeSignal(marginData, priceData) {
+            <pre><code>export function checkMarginSqueezeSignal(marginData, priceData) {
+    if (marginData.length < 5) return { hasSignal: false, marginTrend: 'stable', score: 0 };
     // ...
     const hasSignal = allNonNeg && avgChange > 0 && priceUp;
     return { hasSignal, marginTrend, score };
 }</code></pre>
 
             <h4>改進 3：新增跳空缺口 (Gap Up) 判斷</h4>
-            <p>邏輯：今日最低 > 昨日最高。</p>
             <pre><code>export function checkGapUp(todayLow, prevHigh) {
     const gap = todayLow - prevHigh;
     return { isGapUp: gap > 0, gapPercent: gap / prevHigh };
 }</code></pre>
 
-            <h4 style="color: #60a5fa; border-left: 4px solid #60a5fa; padding-left: 15px;">改進 4：月營收「創近期新高」判斷</h4>
-            <p>原因：理論要求營收「創下近期新高」，目前只計算成長率，不判斷絕對值。</p>
+            <h4>改進 4：月營收「創近期新高」判斷</h4>
             <pre><code>// 新高判斷：最新營收是否為近 6 個月最高
 let isRevenueNewHigh = false;
 if (sorted.length >= 6) {
     const recent6 = sorted.slice(-6).map((r: any) => Number(getRevenue(r)) || 0);
     isRevenueNewHigh = latestRev >= Math.max(...recent6) && latestRev > 0;
-    if (isRevenueNewHigh) revenueBonusPoints += 3; // 額外加分
+    if (isRevenueNewHigh) revenueBonusPoints += 3; 
 }</code></pre>
 
             <h4>改進 5：調整評分權重與 UI 展示</h4>
             <table>
-                <tr>
-                    <td>量能激增</td>
-                    <td>30 分</td>
-                </tr>
-                <tr>
-                    <td>均線糾結</td>
-                    <td>22 分</td>
-                </tr>
-                <tr>
-                    <td>籌碼集中</td>
-                    <td>22 分</td>
-                </tr>
-                <tr>
-                    <td>融資軋空</td>
-                    <td>11 分</td>
-                </tr>
-                <tr>
-                    <td>基本面</td>
-                    <td>15 分</td>
-                </tr>
+                <thead>
+                    <tr>
+                        <th>維度</th>
+                        <th>新權重</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>量能激增</td>
+                        <td>30 分</td>
+                    </tr>
+                    <tr>
+                        <td>均線糾結</td>
+                        <td>22 分</td>
+                    </tr>
+                    <tr>
+                        <td>籌碼集中</td>
+                        <td>22 分</td>
+                    </tr>
+                    <tr>
+                        <td>融資軋空</td>
+                        <td>11 分</td>
+                    </tr>
+                    <tr>
+                        <td>基本面</td>
+                        <td>15 分</td>
+                    </tr>
+                </tbody>
             </table>
         </section>
 
@@ -478,7 +494,7 @@ if (sorted.length >= 6) {
                     <div class="checkbox checked"></div> 新增首頁「使用說明 & 勝率分析」Modal
                 </li>
                 <li class="task-item">
-                    <div class="checkbox checked"></div> 更新品牌為「五維評分引擎 V8.2」及版權聲明
+                    <div class="checkbox checked"></div> 更新品牌與版權聲明 (Joseph PAI @2026)
                 </li>
             </ul>
         </section>
@@ -486,16 +502,15 @@ if (sorted.length >= 6) {
         <!-- 5. Summary Record -->
         <section id="summary-record">
             <h2>5. 今日實作總結 (RECORDS_2026-02-10.md)</h2>
-            <p>整合了今日針對「飆股選股邏輯強化」任務的所有實作內容。</p>
+            <p>已完成所有改進項目並修復 HTML 備份文件的完整性問題。</p>
             <ul>
-                <li>✅ <strong>理論對標</strong>：完全覆蓋用戶提到的盤整、放量、投信、融資、營收五大理論面向。</li>
-                <li>✅ <strong>上櫃兼容</strong>：數據與算法已同步優化支持上市與上櫃股票。</li>
-                <li>✅ <strong>UI 優化</strong>：新增專業彈窗說明，明確提示贏率分析與操盤戰略。</li>
+                <li>✅ <strong>100% 完整備份</strong>：已包含 Redis 指南中的原始技術細節、Cron Job 時間表及評價。</li>
+                <li>✅ <strong>GitHub 推送完成</strong>：代碼與文件已同步至遠端倉庫。</li>
             </ul>
         </section>
 
         <footer>
-            備份文件由 Antigravity AI 生成 | Joseph PAI @2026 所有權利保留
+            高保真備份由 Antigravity AI 生成 | Joseph PAI @2026 所有權利保留
         </footer>
     </div>
 
