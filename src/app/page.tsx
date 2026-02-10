@@ -537,7 +537,7 @@ export default function DashboardPage() {
         ) : filteredResults.length === 0 && hasScanned && !isWorking ? (
           <div className="py-40 text-center border-4 border-dashed border-rose-900/30 rounded-[4rem] bg-rose-500/5 px-10">
             <div className="text-9xl mb-10">🔍</div>
-            <p className="text-rose-400 font-black text-5xl mb-6 leading-tight">未發現符合標的</p>
+            <p className="text-rose-400 font-black text-5xl mb-6 leading-tight">沒有找到符合條件的股票，請明天再試</p>
             <div className="max-w-md mx-auto space-y-6">
               <p className="text-slate-500 text-2xl font-black leading-relaxed">
                 已深度分析 {timing?.candidatesCount} 支股票 (市場總量: {timing?.totalStocks} 支)，但在目前配置下未發現「完美共振」。
@@ -579,7 +579,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4 py-4 px-8 bg-blue-500/5 rounded-full border border-blue-500/10">
             <Sparkles className="w-5 h-5 text-blue-500" />
             <p className="text-slate-500 text-sm font-black tracking-widest uppercase">
-              Antigravity Resonance Engine v8.2 | {new Date().toLocaleDateString()}
+              五維評分引擎 V8.2 | Joseph PAI @2026 | {new Date().toLocaleDateString()}
             </p>
           </div>
         </footer>
