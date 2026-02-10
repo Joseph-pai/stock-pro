@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>實作紀錄與部署指南 (2026-02-10)</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f1f5f9;
+            --text-dim: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(to right, #60a5fa, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+        .date-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid var(--primary);
+            border-radius: 20px;
+            color: var(--primary);
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        nav {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 40px;
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+        }
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+        nav a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        nav a:hover {
+            color: var(--primary);
+        }
+        section {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h2 {
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 10px;
+            margin-top: 0;
+            color: var(--primary);
+        }
+        pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            white-space: pre-wrap;
+        }
+        .md-content {
+            margin-top: 20px;
+        }
+        footer {
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            margin-top: 60px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>實作紀錄與部署指南</h1>
+            <div class="date-tag">2026-02-10 存檔</div>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="#summary">今日總結</a></li>
+                <li><a href="#walkthrough">完成報告</a></li>
+                <li><a href="#netlify">Netlify 部署指南</a></li>
+                <li><a href="#plan">實作計劃</a></li>
+                <li><a href="#task">任務清單</a></li>
+            </ul>
+        </nav>
+
+        <section id="summary">
+            <h2>1. 今日總結 (RECORDS_2026-02-10.md)</h2>
+            <div class="md-content">
+                <pre># 飆股選股邏輯強化 — 實作紀錄 (2026-02-10)
+
+本文件整合了今日針對「飆股選股邏輯強化」任務的所有相關紀錄，包含實作計劃、任務清單與完成報告。
+
+---
+
+## 1. 實作計劃 (Implementation Plan)
+
+### 改進 1：延長 VRatio 基線期（5天 → 20天）
+將 `calculateVRatio()` 的基線期從前 5 天改為前 20 天，以獲得更穩定的「平日均量」參考點。
+
+### 改進 2：新增融資融券軋空信號
+利用 FinMind API 獲取融資融券數據，判斷「融資溫和增加 + 股價同步上升」的軋空動能。
+
+### 改進 3：新增跳空缺口（Gap Up）判斷
+判斷「今日最低 > 昨日最高」的起跳信號。
+
+### 改進 4：月營收「創近期新高」判斷
+分析月營收絕對值，確認是否為近 6 個月新高。
+
+### 改進 5：五維評分權重調整
+- 量能激增：30 分
+- 均線糾結：22 分
+- 籌碼集中：22 分
+- 融資軋空：11 分
+- 基本面：15 分
+
+---
+
+## 2. 任務清單 (Task Checklist)
+
+- [x] **延長 VRatio 基線期**
+- [x] **新增融資融券軋空信號** (含 API 整合與 Redis 快取)
+- [x] **新增跳空缺口判斷**
+- [x] **新增月營收創近期新高判斷**
+- [x] **更新評分權重與 UI 展示** (含 StockCard Tag 與首頁 Modal)
+- [x] **上櫃數據同步優化**
+- [x] **品牌與版權聲明更新** (五維評分引擎 V8.2 | Joseph PAI @2026)
+
+---
+
+## 3. 完成報告 (Full Walkthrough)
+
+### 修改摘要
+根據理論框架分析出的差距，完成了 **5 項改進**，涉及 **5 個檔案**。
+
+### 修改內容
+
+#### 1. VRatio 基線延長（5天 → 20天）
+**效果**：對比「平日量」的基線更穩定，避免近幾天放量導致 VRatio 被稀釋。支持 graceful fallback。
+
+#### 2. 融資融券軋空信號（全新功能）
+- **finmind.ts**: 新增 `getMarginTrading()` 方法
+- **engine.ts**: 新增 `checkMarginSqueezeSignal()`
+- **scanner.ts**: 整合融資數據獲取
+
+**邏輯**：近 5 日融資餘額穩定增加 + 股價同步上升 → 觸發 `MARGIN_SQUEEZE` 標籤。
+
+#### 3. 跳空缺口判斷（全新功能）
+**邏輯**：`今日最低 > 昨日最高` → 觸發 `GAP_UP` 標籤。
+
+#### 4. 月營收創近期新高
+**邏輯**：最新月營收 ≥ 近 6 個月最高值 → 觸發 `REVENUE_NEW_HIGH` 標籤。
+
+#### 5. 五維評分與 UI
+**新權重**：量能激增 (30)、均線糾結 (22)、籌碼集中 (22)、融資軋空 (11)、基本面 (15)。
+
+#### 6. 首頁「使用說明 & 勝率分析」
+功能：彈出深色磨砂玻璃質感的彈窗，包含勝率分析與戰略引導。
+
+#### 7. 最終細節優化與品牌更新
+提示語修改：「沒有找到符合條件的股票，請明天再試」；頁尾更新：「五維評分引擎 V8.2 | Joseph PAI @2026」。
+
+---
+*紀錄日期：2026-02-10*
+*紀錄生成：Antigravity AI*</pre>
+            </div>
+        </section>
+
+        <section id="walkthrough">
+            <h2>2. 完成報告 (walkthrough.md)</h2>
+            <div class="md-content">
+                <pre># 飆股選股邏輯強化 — 完成報告
+
+## 修改摘要
+根據理論框架分析出的差距，完成了 5 項改進，涉及 5 個檔案。
+
+## 修改內容
+### 1. VRatio 基線延長（5天 → 20天）
+效果：對比「平日量」的基線更穩定，避免近幾天放量導致 VRatio 被稀釋。支持 graceful fallback。
+
+### 2. 融資融券軋空信號（全新功能）
+邏輯：近 5 日融資餘額穩定增加 + 股價同步上升 → 觸發 MARGIN_SQUEEZE 標籤。
+
+### 3. 跳空缺口判斷（全新功能）
+邏輯：今日最低 > 昨日最高 → 觸發 GAP_UP 標籤，並在 analysisHints 中顯示缺口幅度。
+
+### 4. 月營收創近期新高
+邏輯：最新月營收 ≥ 近 6 個月最高值 → 觸發 REVENUE_NEW_HIGH 標籤，額外加 3 分。
+
+### 5. 五維評分與 UI
+更新權重（滿分 100）：量能 30, 均線 22, 籌碼 22, 融資 11, 基本面 15。
+
+### 6. 首頁「使用說明 & 勝率分析」
+功能：新增 Modal 彈窗，包含理論與實際差距分析、雷達與 GPS 策略引導。
+
+### 7. 最終細節優化與品牌更新
+修改提示語為「沒有找到符合條件的股票，請明天再試」；更新版權聲明為 Joseph PAI @2026。
+
+## 驗證與部署
+- ✅ npm run build 通過
+- ✅ GitHub 推送至 main 分支
+- ✅ 上櫃市場支持確認</pre>
+            </div>
+        </section>
+
+        <section id="netlify">
+            <h2>3. Netlify 部署指南 (netlify_deployment_guide.md)</h2>
+            <div class="md-content">
+                <pre># Netlify 部署調整指南 (針對 Redis 緩存)
+
+由於 Netlify 是基於 Serverless Functions 的架構，部署時需要注意以下幾點：
+
+## 1. 外部 Redis 服務 (必要)
+Netlify 本身不提供 Redis。建議使用 Upstash (專為 Serverless 設計)。
+
+## 2. Vercel KV 詳細操作步驟
+1. 登入 Vercel 並建立 KV 數據庫。
+2. 選擇區域 (建議 us-east-1)。
+3. 獲取 REDIS_URL 連結字串。
+
+## 3. Netlify 環境變數設置
+在 Netlify 的 Site Settings 中添加：
+- REDIS_URL：外部 Redis 的連結字串。
+- 其他 API Key (如 FinMind)。
+
+## 4. 代碼優化建議
+ioredis 在 Serverless 環境中需注意連結數限制。未來可考慮更換為 @upstash/redis (HTTP 協議)。
+
+## 5. 靜態預渲染限制
+若編譯期需抓取數據，請確保編譯環境能訪問到 Redis。</pre>
+            </div>
+        </section>
+
+        <section id="plan">
+            <h2>4. 實作計劃 (implementation_plan.md)</h2>
+            <div class="md-content">
+                <pre># 飆股選股邏輯強化計劃
+
+## Proposed Changes
+
+### 改進 1：延長 VRatio 基線期
+原因：5 天太短，易受近期波動影響。改為 20 天以代表常態量能。
+
+### 改進 2：新增融資融券軋空信號
+原因：理論要求判斷軋空動能。新增 getMarginTrading 並在系統中整合。
+
+### 改進 3：新增跳空缺口判斷
+原因：跳空是強力起跑信號，目前系統未偵測。
+
+### 改進 4：月營收「創近期新高」判斷
+原因：由相對成長轉向絕對值新高判斷，符合理論要求。
+
+### 改進 5：調整評分權重與 UI 展示
+重新分配權重，加入融資與跳空評分項。
+
+## Verification Plan
+1. Build 驗證：npm run build
+2. 單股驗證：測試台積電 (2330)
+3. 全市場掃描驗證</pre>
+            </div>
+        </section>
+
+        <section id="task">
+            <h2>5. 任務清單 (task.md)</h2>
+            <div class="md-content">
+                <pre># 飆股選股邏輯強化任務
+
+## 改進項目
+- [x] 1. 延長 VRatio 基線期：5 天 → 20 天
+- [x] 2. 新增融資融券軋空信號 (FinMind & 邏輯整合)
+- [x] 3. 新增跳空缺口判斷
+- [x] 4. 新增月營收「創近期新高」判斷
+- [x] 5. 更新評分權重與 UI 展示 (StockCard & Modal)
+- [x] 6. 上櫃市場兼容性優化
+- [x] 7. 品牌與版權聲明更新
+
+## 驗證
+- [x] npm run build 通過
+- [x] GitHub 推送完成
+- [x] 代碼邏輯靜態檢查通過</pre>
+            </div>
+        </section>
+
+        <footer>
+            分析與實作由 Antigravity AI 協助完成 | Joseph PAI @2026 所有權利保留
+        </footer>
+    </div>
+</body>
+</html>
