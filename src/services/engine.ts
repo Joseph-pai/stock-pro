@@ -8,13 +8,16 @@
  * Optimized: Average of recent 3 days / Average of previous 45 days (baseline)
  */
 export function calculateVRatio(volumes: number[]): number {
-    if (volumes.length < 5) return 0;
+    if (volumes.length < 6) return 0;
 
-    // Standard Volume Ratio: Today vs Average of previous 5 days
+    // 觀測：當日量
     const observationAvg = volumes[volumes.length - 1];
 
-    // Baseline: last 5 days before today
-    const baselineVolumes = volumes.slice(-6, -1);
+    // 基線：前 20 天均量（排除當日），更接近理論中「平日量」的概念
+    // 如果數據不足 20 天，使用所有可用的歷史量（至少 5 天）
+    const availableBaseline = volumes.slice(0, -1); // 排除當日
+    const baselineVolumes = availableBaseline.slice(-20); // 最多取 20 天
+    if (baselineVolumes.length < 5) return 0;
     const baselineAvg = baselineVolumes.reduce((a, b) => a + b, 0) / baselineVolumes.length;
 
     return baselineAvg === 0 ? 0 : observationAvg / baselineAvg;
@@ -43,6 +46,54 @@ export function checkVolumeIncreasing(volumes: number[]): boolean {
     if (volumes.length < 3) return false;
     const last3 = volumes.slice(-3);
     return last3[2] > last3[1] && last3[1] > last3[0];
+}
+
+/**
+ * 判斷跳空缺口（Gap Up）
+ * 條件：今日最低 > 昨日最高
+ */
+export function checkGapUp(
+    todayLow: number,
+    prevHigh: number
+): { isGapUp: boolean; gapPercent: number } {
+    const gap = todayLow - prevHigh;
+    const gapPercent = prevHigh > 0 ? gap / prevHigh : 0;
+    return {
+        isGapUp: gap > 0,
+        gapPercent: Math.max(0, gapPercent)
+    };
+}
+
+/**
+ * 判斷融資融券軋空動能
+ * 條件：近 5 日融資餘額穩定/溫和增加 && 股價同步上升 → 軋空信號
+ */
+export function checkMarginSqueezeSignal(
+    marginData: { date: string; MarginPurchaseTodayBalance: number; ShortSaleTodayBalance: number }[],
+    priceData: { date: string; close: number }[]
+): { hasSignal: boolean; marginTrend: 'increasing' | 'stable' | 'decreasing'; score: number } {
+    if (marginData.length < 5) return { hasSignal: false, marginTrend: 'stable', score: 0 };
+
+    const recent5 = marginData.slice(-5);
+    const marginChanges: number[] = [];
+    for (let i = 1; i < recent5.length; i++) {
+        marginChanges.push(recent5[i].MarginPurchaseTodayBalance - recent5[i - 1].MarginPurchaseTodayBalance);
+    }
+
+    const avgChange = marginChanges.reduce((a, b) => a + b, 0) / marginChanges.length;
+    const allNonNeg = marginChanges.every(c => c >= 0);
+    const marginTrend: 'increasing' | 'stable' | 'decreasing' = avgChange > 0 ? 'increasing' : (avgChange === 0 ? 'stable' : 'decreasing');
+
+    // 股價同步判斷
+    const recentPrices = priceData.slice(-5);
+    const priceUp = recentPrices.length >= 2 &&
+        recentPrices[recentPrices.length - 1].close > recentPrices[0].close;
+
+    // 軋空信號：融資溫和增加 + 股價上升
+    const hasSignal = allNonNeg && avgChange > 0 && priceUp;
+    const score = hasSignal ? Math.min(1, avgChange / 500) : 0;
+
+    return { hasSignal, marginTrend, score };
 }
 
 /**

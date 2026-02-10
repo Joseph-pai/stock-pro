@@ -45,7 +45,7 @@ export interface AnalysisResult {
     verdict: string;           // Human readable analysis (e.g. "Bullish Breakout")
 
     // Flags
-    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN' | 'VOLUME_INCREASING' | 'DISCOVERY' | 'RED_K' | 'BASIC_SUPPORT')[];
+    tags: ('VOLUME_EXPLOSION' | 'MA_SQUEEZE' | 'INST_BUYING' | 'BREAKOUT' | 'LIMITED_SCAN' | 'VOLUME_INCREASING' | 'DISCOVERY' | 'RED_K' | 'BASIC_SUPPORT' | 'MARGIN_SQUEEZE' | 'GAP_UP' | 'REVENUE_NEW_HIGH')[];
 
     // Detailed History (Optional, for Charting)
     history?: StockData[];
@@ -63,6 +63,7 @@ export interface AnalysisResult {
         volumeScore: number;
         maScore: number;
         chipScore: number; // Institutional
+        marginScore?: number; // 融資軋空
         fundamentalBonus?: number; // Revenue YoY/MoM bonus
         total: number;
     };
@@ -71,6 +72,7 @@ export interface AnalysisResult {
         technicalSignals?: string;
         chipSignals?: string;
         fundamentalSignals?: string;
+        marginSignals?: string;
         technical?: string;
         chips?: string;
         fundamental?: string;
@@ -81,6 +83,10 @@ export interface AnalysisResult {
     today_volume?: number;       // 今日成交量 (張)
     sector_name?: string;      // 產業名稱
     potential_score?: number;   // 爆發潛力評分
+    marginSqueezeSignal?: boolean;   // 融資軋空信號
+    marginTrend?: 'increasing' | 'stable' | 'decreasing';
+    isGapUp?: boolean;            // 跳空缺口
+    isRevenueNewHigh?: boolean;   // 營收創近期新高
 }
 
 export interface StockCandle {

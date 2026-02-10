@@ -1,7 +1,7 @@
 import { FinMindClient, } from '@/lib/finmind';
 import { FinMindExtras } from '@/lib/finmind';
 import { ExchangeClient, normalizeAnyDate } from '@/lib/exchange';
-import { evaluateStock, calculateVRatio, checkMaConstrict, checkVolumeIncreasing } from './engine';
+import { evaluateStock, calculateVRatio, checkMaConstrict, checkVolumeIncreasing, checkGapUp, checkMarginSqueezeSignal } from './engine';
 import { AnalysisResult, StockData } from '@/types';
 import { format, subDays } from 'date-fns';
 import { calculateSMA } from './indicators';
@@ -303,6 +303,27 @@ export const ScannerService = {
                 } catch (e) { console.warn(`[Analyze] Revenue fetch failed for ${stockId}`); }
             }
 
+            // 2.5 Fetch Margin Trading Data (Cache: 4h)
+            let marginData: any[] = [];
+            const marginCacheKey = `tsbs:raw:margin:${stockId}:${todayStr}`;
+            try {
+                const cached = await redis.get(marginCacheKey);
+                if (cached) marginData = JSON.parse(cached);
+            } catch (e) { console.warn('Redis read error (margin):', e); }
+
+            if (marginData.length === 0) {
+                try {
+                    marginData = await FinMindExtras.getMarginTrading({
+                        stockId,
+                        startDate: format(subDays(new Date(), 10), 'yyyy-MM-dd'),
+                        endDate: todayStr
+                    });
+                    if (marginData.length > 0) {
+                        try { await redis.set(marginCacheKey, JSON.stringify(marginData), 'EX', 14400); } catch (e) { }
+                    }
+                } catch (e) { console.warn(`[Analyze] Margin fetch failed for ${stockId}`); }
+            }
+
             if (prices.length < 3) {
                 console.warn(`[Analyze] Insufficient data for ${stockId} (${prices.length} days found)`);
                 return null;
@@ -377,18 +398,48 @@ export const ScannerService = {
                             yoyScore = Math.max(0, Math.min(1, yoy / 0.2));
                         }
                     }
-                    revenueBonusPoints = Math.round((momScore * 5 + yoyScore * 5) * 100) / 100;
+
+                    // 新高判斷：最新營收是否為近 6 個月最高
+                    let isRevenueNewHigh = false;
+                    if (sorted.length >= 6) {
+                        const recent6 = sorted.slice(-6).map((r: any) => Number(getRevenue(r)) || 0);
+                        isRevenueNewHigh = latestRev >= Math.max(...recent6) && latestRev > 0;
+                        if (isRevenueNewHigh) revenueBonusPoints += 3; // 額外加分
+                    }
+
+                    revenueBonusPoints = Math.round((momScore * 5 + yoyScore * 5 + (isRevenueNewHigh ? 3 : 0)) * 100) / 100;
                     revenueSupport = revenueBonusPoints > 0.5;
                 }
             } catch (e) { }
 
-            // Recompute comprehensive score
+            // Analyze margin squeeze signal
+            const marginSignal = checkMarginSqueezeSignal(marginData, prices);
+            const marginScore = marginSignal.score * 11; // weight 11
+
+            // Analyze gap-up
+            const prevDay = prices[prices.length - 2];
+            const gapResult = checkGapUp(today.min, prevDay.max);
+
+            // Detect revenue new high from revenue analysis
+            let isRevenueNewHigh = false;
+            try {
+                if (Array.isArray(rev) && rev.length >= 6) {
+                    const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
+                    const sorted = [...rev].sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
+                    const latestRev = Number(getRevenue(sorted[sorted.length - 1])) || 0;
+                    const recent6 = sorted.slice(-6).map((r: any) => Number(getRevenue(r)) || 0);
+                    isRevenueNewHigh = latestRev >= Math.max(...recent6) && latestRev > 0;
+                }
+            } catch (e) { }
+
+            // Recompute comprehensive score (5 dimensions: Vol 30, MA 22, Chip 22, Margin 11, Fundamental 15)
             const engineDetails = result.comprehensiveScoreDetails || { volumeScore: 0, maScore: 0, chipScore: 0, total: 0 };
-            const normalizedVolumeScore = (engineDetails.volumeScore || 0) * (35 / 40);
-            const normalizedMaScore = (engineDetails.maScore || 0) * (25 / 30);
-            const normalizedChipScore = Math.min(instScore * (25 / 30), 25);
-            const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 10), 15);
-            const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedFundamentalBonus;
+            const normalizedVolumeScore = (engineDetails.volumeScore || 0) * (30 / 40);
+            const normalizedMaScore = (engineDetails.maScore || 0) * (22 / 30);
+            const normalizedChipScore = Math.min(instScore * (22 / 30), 22);
+            const normalizedMarginScore = Math.min(marginScore, 11);
+            const normalizedFundamentalBonus = Math.min(revenueBonusPoints * (15 / 13), 15);
+            const totalPoints = normalizedVolumeScore + normalizedMaScore + normalizedChipScore + normalizedMarginScore + normalizedFundamentalBonus;
             const finalScore = Math.min(1, Math.max(0, totalPoints / 100));
 
             const volThreshold = settings?.volumeRatio || 3.5;
@@ -400,6 +451,9 @@ export const ScannerService = {
             if (result.maData.isSqueezing) tags.push('MA_SQUEEZE');
             if (result.vRatio >= volThreshold) tags.push('VOLUME_EXPLOSION');
             if (revenueSupport) tags.push('BASIC_SUPPORT');
+            if (marginSignal.hasSignal) tags.push('MARGIN_SQUEEZE');
+            if (gapResult.isGapUp) tags.push('GAP_UP');
+            if (isRevenueNewHigh) tags.push('REVENUE_NEW_HIGH');
 
             return {
                 stock_id: stockId,
@@ -420,21 +474,27 @@ export const ScannerService = {
                 today_volume: today.Trading_Volume,
                 dailyVolumeTrend: prices.map(p => p.Trading_Volume).slice(-10),
                 volumeIncreasing: checkVolumeIncreasing(prices.map(p => p.Trading_Volume)),
+                marginSqueezeSignal: marginSignal.hasSignal,
+                marginTrend: marginSignal.marginTrend,
+                isGapUp: gapResult.isGapUp,
+                isRevenueNewHigh,
                 comprehensiveScoreDetails: {
                     volumeScore: parseFloat(normalizedVolumeScore.toFixed(2)),
                     maScore: parseFloat(normalizedMaScore.toFixed(2)),
                     chipScore: parseFloat(normalizedChipScore.toFixed(2)),
+                    marginScore: parseFloat(normalizedMarginScore.toFixed(2)),
                     fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
                     total: parseFloat(totalPoints.toFixed(2))
                 },
                 is_recommended: finalScore >= 0.6 || (result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold),
                 analysisHints: {
-                    technicalSignals: `V-Ratio 升至 ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線高度糾結' : ''} • 量能激增`,
+                    technicalSignals: `V-Ratio 升至 ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線高度糾結' : ''}${gapResult.isGapUp ? ` • 跳空缺口 ${(gapResult.gapPercent * 100).toFixed(1)}%` : ''} • 量能激增`,
                     chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
-                    fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分 • 基本面支撐` : '營收成長動能待觀察',
-                    technical: result.isBreakout ? '帶量突破' : (result.maData.isSqueezing ? '均線糾結待突破' : '無明顯技術信號'),
+                    fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分${isRevenueNewHigh ? ' • 創近6月新高' : ''} • 基本面支撐` : '營收成長動能待觀察',
+                    marginSignals: marginSignal.hasSignal ? `融資溫和增加 • 軋空動能醞釀中` : '無融資軋空信號',
+                    technical: gapResult.isGapUp ? `跳空缺口 ${(gapResult.gapPercent * 100).toFixed(1)}%` : (result.isBreakout ? '帶量突破' : (result.maData.isSqueezing ? '均線糾結待突破' : '無明顯技術信號')),
                     chips: consecutiveBuy >= 3 ? `投信連買 ${consecutiveBuy} 天` : '無投信連買',
-                    fundamental: revenueSupport ? '月營收連三月成長' : '營收未明顯支撐'
+                    fundamental: revenueSupport ? (isRevenueNewHigh ? '月營收連三月成長 • 創近6月新高' : '月營收連三月成長') : '營收未明顯支撐'
                 }
             };
         } catch (error: any) {

@@ -133,5 +133,27 @@ export const FinMindExtras = {
             console.warn('[FinMindExtras] MonthlyRevenue fetch failed:', error.message || error);
             return [];
         }
+    },
+
+    getMarginTrading: async (options: { stockId?: string; startDate?: string; endDate?: string }) => {
+        try {
+            const params: any = {
+                dataset: 'TaiwanStockMarginPurchaseShortSale',
+                token: CONFIG.FINMIND.TOKEN,
+            };
+            if (options.stockId) params.data_id = options.stockId;
+            if (options.startDate) params.start_date = options.startDate;
+            if (options.endDate) params.end_date = options.endDate;
+
+            const res = await client.get<FinMindResponse<any>>('', { params });
+            if (!res.data || res.data.status !== 200) {
+                const msg = res.data?.msg || 'No response';
+                throw new Error(`FinMind Status ${res.data?.status || 'Unknown'}: ${msg}`);
+            }
+            return res.data.data || [];
+        } catch (error: any) {
+            console.warn('[FinMindExtras] MarginTrading fetch failed:', error.message || error);
+            return [];
+        }
     }
 };

@@ -27,6 +27,9 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
     const hasVolumeExplosion = data.v_ratio >= 3.0;
     const hasMaSqueeze = data.tags.includes('MA_SQUEEZE');
     const hasBreakout = data.tags.includes('BREAKOUT');
+    const hasMarginSqueeze = data.tags.includes('MARGIN_SQUEEZE');
+    const hasGapUp = data.tags.includes('GAP_UP');
+    const hasRevenueNewHigh = data.tags.includes('REVENUE_NEW_HIGH');
 
     return (
         <div
@@ -83,6 +86,22 @@ export const StockCard: React.FC<StockCardProps> = ({ data, index, onClick }) =>
                                 <span className="flex items-center gap-1.5 text-xs font-black bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/30">
                                     <TrendingUp className="w-4 h-4" />
                                     帶量突破
+                                </span>
+                            )}
+                            {hasMarginSqueeze && (
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-rose-500/10 text-rose-400 px-3 py-1 rounded-full border border-rose-500/30">
+                                    <ShieldCheck className="w-4 h-4" />
+                                    融資軋空
+                                </span>
+                            )}
+                            {hasGapUp && (
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-sky-500/10 text-sky-400 px-3 py-1 rounded-full border border-sky-500/30">
+                                    ⬆️ 跳空缺口
+                                </span>
+                            )}
+                            {hasRevenueNewHigh && (
+                                <span className="flex items-center gap-1.5 text-xs font-black bg-teal-500/10 text-teal-400 px-3 py-1 rounded-full border border-teal-500/30">
+                                    📊 營收新高
                                 </span>
                             )}
                         </div>
