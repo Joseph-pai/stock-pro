@@ -2,9 +2,16 @@ import axios from 'axios';
 import { CONFIG } from './config';
 import { StockData, InstitutionalData, FinMindResponse } from '@/types';
 
+/**
+ * FinMind API Client
+ * Uses Authorization: Bearer header for token (matching official Python library)
+ */
 const client = axios.create({
     baseURL: CONFIG.FINMIND.API_URL,
     timeout: 15000, // 15 seconds
+    headers: {
+        'Authorization': `Bearer ${CONFIG.FINMIND.TOKEN}`,
+    },
 });
 
 /**
@@ -16,7 +23,6 @@ export const FinMindClient = {
         try {
             const params: any = {
                 dataset: 'TaiwanStockPrice',
-                token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
             // Map 'date' to 'start_date' AND 'end_date' for single-day snapshot
@@ -58,7 +64,6 @@ export const FinMindClient = {
         try {
             const params: any = {
                 dataset: 'TaiwanStockHoldingSharesPer',
-                token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
             // Map 'date' to 'start_date' AND 'end_date' for single-day snapshot
@@ -100,7 +105,6 @@ export const FinMindClient = {
         try {
             const params = {
                 dataset: 'TaiwanStockInfo',
-                token: CONFIG.FINMIND.TOKEN,
             };
             const res = await client.get<FinMindResponse<{ stock_id: string; stock_name: string }>>('', { params });
             return res.data.data || [];
@@ -117,7 +121,6 @@ export const FinMindExtras = {
         try {
             const params: any = {
                 dataset: 'TaiwanStockMonthRevenue',
-                token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
             if (options.startDate) params.start_date = options.startDate;
@@ -139,7 +142,6 @@ export const FinMindExtras = {
         try {
             const params: any = {
                 dataset: 'TaiwanStockMarginPurchaseShortSale',
-                token: CONFIG.FINMIND.TOKEN,
             };
             if (options.stockId) params.data_id = options.stockId;
             if (options.startDate) params.start_date = options.startDate;
