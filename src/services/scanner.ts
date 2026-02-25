@@ -250,17 +250,17 @@ export const ScannerService = {
                 if (cached) prices = JSON.parse(cached);
             } catch (e) { console.warn('Redis read error (price):', e); }
 
-            if (prices.length === 0) {
+            if (prices.length < 25) {
                 try {
                     const endDate = todayStr;
-                    const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+                    const startDate = format(subDays(new Date(), 60), 'yyyy-MM-dd');
                     prices = await FinMindClient.getDailyStats({ stockId, startDate, endDate });
                 } catch (e) {
                     console.warn(`[Analyze] FinMind price failed for ${stockId}, fallback to Exchange...`);
                 }
-                // Fallback to Exchange if FinMind returned empty or failed
-                if (prices.length === 0) {
-                    console.warn(`[Analyze] FinMind returned empty for ${stockId}, using Exchange fallback...`);
+                // Fallback to Exchange if FinMind returned insufficient data
+                if (prices.length < 25) {
+                    console.warn(`[Analyze] FinMind returned insufficient data (${prices.length} days) for ${stockId}, using Exchange fallback...`);
                     try {
                         prices = await ExchangeClient.getStockHistory(stockId);
                     } catch (e) {
