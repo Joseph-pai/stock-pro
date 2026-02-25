@@ -350,6 +350,8 @@ export default function DashboardPage() {
             </div>
             <div className="relative group">
               <select
+                id="market-select"
+                name="market"
                 value={market}
                 onChange={(e) => setMarket(e.target.value as MarketType)}
                 className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-2xl font-black text-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer shadow-xl"
@@ -368,6 +370,8 @@ export default function DashboardPage() {
             </div>
             <div className="relative group">
               <select
+                id="sector-select"
+                name="sector"
                 value={sector}
                 onChange={(e) => setSector(e.target.value)}
                 className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-2xl font-black text-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer shadow-xl"
@@ -424,6 +428,8 @@ export default function DashboardPage() {
                   <span className="text-4xl font-black text-amber-400 font-mono">{settings.volumeRatio}x</span>
                 </div>
                 <input
+                  id="volume-ratio-range"
+                  name="volumeRatio"
                   type="range" min="1.0" max="6.0" step="0.5"
                   value={settings.volumeRatio}
                   onChange={(e) => setSettings({ ...settings, volumeRatio: parseFloat(e.target.value) })}
@@ -441,6 +447,8 @@ export default function DashboardPage() {
                   <span className="text-4xl font-black text-purple-400 font-mono">{settings.maConstrict}%</span>
                 </div>
                 <input
+                  id="ma-constrict-range"
+                  name="maConstrict"
                   type="range" min="0.5" max="5.0" step="0.5"
                   value={settings.maConstrict}
                   onChange={(e) => setSettings({ ...settings, maConstrict: parseFloat(e.target.value) })}
@@ -458,6 +466,8 @@ export default function DashboardPage() {
                   <span className="text-4xl font-black text-emerald-400 font-mono">{settings.breakoutPercent}%</span>
                 </div>
                 <input
+                  id="breakout-percent-range"
+                  name="breakoutPercent"
                   type="range" min="1.0" max="8.0" step="0.5"
                   value={settings.breakoutPercent}
                   onChange={(e) => setSettings({ ...settings, breakoutPercent: parseFloat(e.target.value) })}
