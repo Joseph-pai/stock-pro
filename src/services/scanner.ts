@@ -257,7 +257,15 @@ export const ScannerService = {
                     prices = await FinMindClient.getDailyStats({ stockId, startDate, endDate });
                 } catch (e) {
                     console.warn(`[Analyze] FinMind price failed for ${stockId}, fallback to Exchange...`);
-                    prices = await ExchangeClient.getStockHistory(stockId);
+                }
+                // Fallback to Exchange if FinMind returned empty or failed
+                if (prices.length === 0) {
+                    console.warn(`[Analyze] FinMind returned empty for ${stockId}, using Exchange fallback...`);
+                    try {
+                        prices = await ExchangeClient.getStockHistory(stockId);
+                    } catch (e) {
+                        console.error(`[Analyze] Exchange fallback also failed for ${stockId}:`, e);
+                    }
                 }
                 if (prices.length > 0) {
                     try { await redis.set(priceCacheKey, JSON.stringify(prices), 'EX', 14400); } catch (e) { }
