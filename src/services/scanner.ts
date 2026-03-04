@@ -274,7 +274,7 @@ export const ScannerService = {
      * Stage 3: Individual Analysis (個股完整分析)
      * Optimized with Redis Raw Data Caching
      */
-    analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }, stockName?: string): Promise<AnalysisResult | null> => {
+    analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }, stockName?: string, industryMapping?: Record<string, string>): Promise<AnalysisResult | null> => {
         const warnings: string[] = [];
         try {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -382,8 +382,8 @@ export const ScannerService = {
                 return null;
             }
 
-            // Load industry mapping
-            const industryMapping = await ExchangeClient.getIndustryMapping();
+            // Load industry mapping (use passed one if available, else fetch/cache)
+            const mapping = industryMapping || await ExchangeClient.getIndustryMapping();
 
             const result = evaluateStock(prices, settings);
             if (!result) return null;
@@ -509,7 +509,7 @@ export const ScannerService = {
             return {
                 stock_id: stockId,
                 stock_name: stockName || today.stock_name || stockId,
-                sector_name: (industryMapping as Record<string, string>)[stockId.trim()] || '其他',
+                sector_name: (mapping as Record<string, string>)[stockId.trim()] || '其他',
                 close: today.close,
                 change_percent: result.changePercent,
                 score: finalScore,

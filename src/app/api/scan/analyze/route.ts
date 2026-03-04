@@ -15,16 +15,20 @@ export async function POST(req: Request) {
 
         console.log(`[Deep Analysis] Processing batch of ${stocks.length} stocks...`);
 
+        // Pre-fetch industry mapping once for the entire batch to avoid redundant heavy API calls
+        const { ExchangeClient } = await import('@/lib/exchange');
+        const mapping = await ExchangeClient.getIndustryMapping();
+
         // Use the optimized ScannerService which handles Redis caching internally
         const results: AnalysisResult[] = [];
 
-        // 併發控制：批次處理（限制每次併發 5 支），防止大清單導致 504/502 超時
-        const batchSize = 5;
+        // 併發控制：調整為 15 支一組，配合預取 mapping 顯著提升速度，避開 504/502
+        const batchSize = 15;
         for (let i = 0; i < stocks.length; i += batchSize) {
             const batch = stocks.slice(i, i + batchSize);
             const batchResults = await Promise.allSettled(
                 batch.map(async (stock: { id: string, name: string }) => {
-                    return await ScannerService.analyzeStock(stock.id, settings, stock.name);
+                    return await ScannerService.analyzeStock(stock.id, settings, stock.name, mapping);
                 })
             );
 

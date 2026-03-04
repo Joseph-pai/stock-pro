@@ -249,9 +249,18 @@ export const ExchangeClient = {
     },
 
     /**
+     * Internal cache for industry mapping to avoid repeated heavy API calls
+     */
+    _industryMappingCache: null as Record<string, string> | null,
+
+    /**
      * Fetch industry mapping for all stocks
      */
     getIndustryMapping: async (): Promise<Record<string, string>> => {
+        if (ExchangeClient._industryMappingCache) {
+            return ExchangeClient._industryMappingCache;
+        }
+
         const mapping: Record<string, string> = {};
         const { INDUSTRY_MAP } = await import('./sectors');
 
@@ -305,6 +314,7 @@ export const ExchangeClient = {
             // Re-apply hard fixes
             Object.assign(mapping, HARD_FIXES);
 
+            ExchangeClient._industryMappingCache = mapping;
             return mapping;
 
             // Enhanced logging for industry mapping
