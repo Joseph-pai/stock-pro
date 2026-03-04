@@ -154,6 +154,8 @@ export const ExchangeClient = {
                     max: parseNum(item.High) || parseNum(item.HighestPrice),
                     min: parseNum(item.Low) || parseNum(item.LowestPrice),
                     Trading_Volume: vol / 1000,
+                    Trading_money: 0,
+                    Trading_turnover: 0,
                 };
             }).filter((s: any) => s.close > 0 && s.stock_id && s.stock_id.length === 4);
         }
@@ -178,12 +180,16 @@ export const ExchangeClient = {
                         const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
                         monthlyData = res.data.data.map((row: any) => ({
                             stock_id: stockId,
+                            stock_name: '', // Added to match interface
                             date: normalizeAnyDate(row[0]),
                             Trading_Volume: parseNum(row[1]) / 1000,
                             open: parseNum(row[3]),
                             max: parseNum(row[4]),
                             min: parseNum(row[5]),
                             close: parseNum(row[6]),
+                            spread: 0,
+                            Trading_money: 0,
+                            Trading_turnover: 0
                         }));
                     }
                 } else {
@@ -195,14 +201,16 @@ export const ExchangeClient = {
                         const parseNum = (val: string) => parseFloat(val.replace(/,/g, ''));
                         monthlyData = res.data.aaData.map((row: any) => ({
                             stock_id: stockId,
+                            stock_name: '', // Added to match interface
                             date: normalizeAnyDate(row[0]),
-                            Trading_Volume: parseNum(row[1]), // TPEX is usually in 1000 shares already in this API? Check.
-                            // Comparison with other TPEX APIs suggests this one might be in shares. 
-                            // Let's assume consistent with TWSE (1000 shares = 1 unit) if needed.
+                            Trading_Volume: parseNum(row[1]),
                             open: parseNum(row[3]),
                             max: parseNum(row[4]),
                             min: parseNum(row[5]),
                             close: parseNum(row[6]),
+                            spread: 0,
+                            Trading_money: 0,
+                            Trading_turnover: 0
                         }));
                     }
                 }
