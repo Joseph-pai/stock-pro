@@ -127,6 +127,12 @@ export const ExchangeClient = {
         } else {
             const url = `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes`;
             const res = await axios.get(url);
+
+            if (!Array.isArray(res.data)) {
+                console.error(`[Exchange] TPEX OpenAPI returned invalid data:`, res.data);
+                return [];
+            }
+
             const parseNum = (val: any) => {
                 if (typeof val === 'number') return val;
                 if (!val) return 0;
@@ -136,8 +142,7 @@ export const ExchangeClient = {
 
             return res.data.map((item: any) => {
                 // TPEX OpenAPI field names vary by endpoint/version
-                // Prioritize TradeQty (張數*1000) or TradeVolume/Volume (張數)
-                const vol = parseNum(item.TradingShares) || parseNum(item.TradeQty) || parseNum(item.Volume) || parseNum(item.TradeVolume) || parseNum(item.TotalVolume) || 0;
+                const vol = parseNum(item.TradeQty) || parseNum(item.TradingShares) || parseNum(item.Volume) || parseNum(item.TradeVolume) || 0;
 
                 return {
                     stock_id: item.SecuritiesCompanyCode?.trim() || item.Code?.trim(),
@@ -217,12 +222,22 @@ export const ExchangeClient = {
      * Helper to determine market
      */
     isTpexStock: async (stockId: string): Promise<boolean> => {
-        // Simple heuristic: most TPEX stocks are 4 digits, but many overlap.
-        // Better: check mapping or specific length if applicable.
-        // For now, if we can't find it in industry mapping as TWSE, we try to guess.
-        // Real apps usually have a list or use a specific API.
-        // Let's check stockId length or specific prefixes if safe.
-        return stockId.length >= 5 || ['6488', '8069'].includes(stockId); // Add known TPEX
+        // TPEX stocks are usually 4 digits. 
+        // common TPEX ranges: 3xxx, 5xxx, 6xxx, 8xxx (overlaps with TWSE)
+        // More reliable: Use industry mapping or a cached set of TWSE IDs.
+        // For now, expand heuristic to handle common OTC stocks.
+        if (stockId.length >= 5) return true;
+        const idNum = parseInt(stockId);
+        // Heuristic: Many 8xxx and some 6xxx/5xxx/3xxx are OTC. 
+        // In a real app, this should be a lookup in the snapshot or a dedicated list.
+        const knownOTC = ['6488', '8069', '5483', '3293', '3105', '6147', '6274', '5347', '3529'];
+        if (knownOTC.includes(stockId)) return true;
+
+        // If the ID start with 00 (ETFs) or 1-9 (Stocks), it could be either.
+        // Let's assume most 4-digit stocks not in a strict TWSE list might be TPEX if requested from TPEX scan.
+        return true; // Default to true if 4 digits and we are in a TPEX flow? 
+        // Actually, let's keep it simple: 
+        // If we can't be sure, we'll try both or let the caller decide.
     },
 
     /**

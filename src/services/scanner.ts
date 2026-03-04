@@ -80,15 +80,15 @@ export const ScannerService = {
      * 
      * 寧缺毋濫：返回所有符合條件的股票（可能 0-15 支）
      */
-    scanMarket: async (settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<{ results: AnalysisResult[], timing: any }> => {
+    scanMarket: async (market: 'TWSE' | 'TPEX' = 'TWSE', settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }): Promise<{ results: AnalysisResult[], timing: any }> => {
         const t0 = Date.now();
-        console.log('[Scanner] Stage 1: Discovery - 兩階段篩選（快速預篩 + 嚴格驗證）...');
+        console.log(`[Scanner] Stage 1: Discovery (${market}) - 兩階段篩選（快速預篩 + 嚴格驗證）...`);
 
         // Load industry mapping
         const industryMapping = await ExchangeClient.getIndustryMapping();
 
         // Phase 1: 快速預篩（使用快照數據）
-        const snapshot = await ExchangeClient.getAllMarketQuotes('TWSE'); // Add default market to fix build
+        const snapshot = await ExchangeClient.getAllMarketQuotes(market);
         const t1 = Date.now();
 
         if (snapshot.length === 0) {

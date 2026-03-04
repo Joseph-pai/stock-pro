@@ -6,11 +6,11 @@ export const revalidate = 0;
 
 export async function POST(req: Request) {
     try {
-        const { stage, stockIds, stockId, settings } = await req.json();
+        const { stage, stockIds, stockId, settings, market = 'TWSE' } = await req.json();
 
         // Stage 1: Discovery (量能激增+均線糾結)
         if (stage === 'discovery') {
-            const { results, timing } = await ScannerService.scanMarket(settings);
+            const { results, timing } = await ScannerService.scanMarket(market as 'TWSE' | 'TPEX', settings);
             return NextResponse.json({
                 success: true,
                 data: results,

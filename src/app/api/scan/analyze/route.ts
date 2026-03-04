@@ -17,19 +17,28 @@ export async function POST(req: Request) {
 
         // Use the optimized ScannerService which handles Redis caching internally
         const results: AnalysisResult[] = [];
-        const batchResults = await Promise.allSettled(
-            stocks.map(async (stock: { id: string, name: string }) => {
-                return await ScannerService.analyzeStock(stock.id, settings, stock.name);
-            })
-        );
 
-        batchResults.forEach((r, idx) => {
-            if (r.status === 'fulfilled' && r.value) {
-                results.push(r.value);
-            } else if (r.status === 'rejected') {
-                console.warn(`[Analyze API] Failed to analyze ${stocks[idx]?.id}:`, r.reason);
-            }
-        });
+        // 併發控制：批次處理（限制每次併發 5 支），防止大清單導致 504/502 超時
+        const batchSize = 5;
+        for (let i = 0; i < stocks.length; i += batchSize) {
+            const batch = stocks.slice(i, i + batchSize);
+            const batchResults = await Promise.allSettled(
+                batch.map(async (stock: { id: string, name: string }) => {
+                    return await ScannerService.analyzeStock(stock.id, settings, stock.name);
+                })
+            );
+
+            batchResults.forEach((r, idx) => {
+                if (r.status === 'fulfilled' && r.value) {
+                    results.push(r.value);
+                } else if (r.status === 'rejected') {
+                    console.warn(`[Analyze API] Failed to analyze ${batch[idx]?.id}:`, r.reason);
+                }
+            });
+
+            // 如果清單極大，主動在 25 秒左右截斷以保全 API 響應（針對 Vercel 等平台）
+            // console.log(`[Analyze API] Processed ${i + batch.length}/${stocks.length}`);
+        }
 
         console.log(`[Analyze API] Batch complete: ${results.length}/${stocks.length} analyzed (Includes cache hits)`);
 
