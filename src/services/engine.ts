@@ -5,7 +5,7 @@
 
 /**
  * Calculate Volume Ratio (量能倍數)
- * Optimized: Average of recent 3 days / Average of previous 45 days (baseline)
+ * Optimized: Current Volume / Average of previous 45 days (baseline)
  */
 export function calculateVRatio(volumes: number[]): number {
     if (volumes.length < 6) return 0;
@@ -13,10 +13,9 @@ export function calculateVRatio(volumes: number[]): number {
     // 觀測：當日量
     const observationAvg = volumes[volumes.length - 1];
 
-    // 基線：前 20 天均量（排除當日），更接近理論中「平日量」的概念
-    // 如果數據不足 20 天，使用所有可用的歷史量（至少 5 天）
+    // 基線：前 45 天均量（排除當日），更符合中長期量能對比頻率
     const availableBaseline = volumes.slice(0, -1); // 排除當日
-    const baselineVolumes = availableBaseline.slice(-20); // 最多取 20 天
+    const baselineVolumes = availableBaseline.slice(-45); // 取 45 天
     if (baselineVolumes.length < 5) return 0;
     const baselineAvg = baselineVolumes.reduce((a, b) => a + b, 0) / baselineVolumes.length;
 
@@ -121,50 +120,63 @@ export function evaluateStock(history: any[], settings?: { volumeRatio: number, 
     // 2. MA Constrict
     const maData = checkMaConstrict(ma5, ma20, maRef);
 
+    // 2.5 Bullish Check (MA5 > MA20)
+    const isBullish = ma5 > ma20;
+
     // 3. Breakout
     const today = history[history.length - 1];
     const prevClose = history[history.length - 2].close;
     const changePercent = (today.close - prevClose) / prevClose;
-    // const dailyChange = (today.close - today.open) / today.open; // Deprecated: Confusing for users
 
     const isAboveMa = today.close > Math.max(ma5, ma20);
-    // FIXED: Use changePercent (standard daily change) for breakout, matching UI
     const isBreakout = isAboveMa && changePercent >= breakRef;
 
-    // Compute scored components - use configurable thresholds
-    const targetV = settings?.volumeRatio || CONFIG.SYSTEM.V_RATIO_THRESHOLD || 3.5;
+    // Compute scored components
+    const targetV = vRef;
     const volumeNorm = targetV > 0 ? Math.min(vRatio / targetV, 1) : Math.min(vRatio / 5, 1);
-    // MA constrict normalization: if within threshold => full score, else decay gradually
-    const squeezeTarget = maRef || CONFIG.SYSTEM.MA_ALIGNMENT_THRESHOLD || 0.02;
+
+    // MA 平滑衰減模型：閾值內滿分，超出後以指數衰減保護精確度
+    const squeezeTarget = maRef;
     let maNorm = 0;
-    if (maData.constrictValue <= squeezeTarget) maNorm = 1;
-    else {
-        // decay over additional 10% gap (wider tolerance for partial scoring)
-        maNorm = Math.max(0, 1 - ((maData.constrictValue - squeezeTarget) / 0.10));
+    if (maData.constrictValue <= squeezeTarget) {
+        maNorm = 1;
+    } else {
+        // 使用更平滑的衰減曲線：e^(-((x - target) / 0.05)^2)
+        const diff = maData.constrictValue - squeezeTarget;
+        maNorm = Math.max(0, Math.exp(-Math.pow(diff / 0.05, 2)));
     }
-    // Institutional flow placeholder: unknown here, upstream should supply consecutive buy days.
-    const instNorm = 0; // to be filled by scanner/analyzer when institutional data available
 
-    const volumeScore = volumeNorm * 40; // weight 40
-    const maScore = maNorm * 30; // weight 30
-    const instScore = instNorm * 30; // weight 30 (placeholder)
+    // 套用排列權重 (優化選股精度)
+    if (isBullish) {
+        maNorm = Math.min(1, maNorm * (CONFIG.SYSTEM.BULLISH_REWARD || 1.2));
+    } else {
+        maNorm = maNorm * (CONFIG.SYSTEM.BEARISH_PENALTY || 0.5);
+    }
 
-    const totalPoints = volumeScore + maScore + instScore; // 0 - 100
-    const score = Math.min(1, Math.max(0, totalPoints / 100)); // 0 - 1 (for thresholds used elsewhere)
+    const instNorm = 0; // to be filled by scanner
+
+    const volumeScore = volumeNorm * 40;
+    const maScore = maNorm * 30;
+    const instScore = instNorm * 30;
+
+    const totalPoints = volumeScore + maScore + instScore;
+    const score = Math.min(1, Math.max(0, totalPoints / 100));
 
     return {
         vRatio,
         maData,
+        is_bullish: isBullish,
         changePercent,
-        dailyChange: changePercent, // Unify with changePercent
+        dailyChange: changePercent,
         isBreakout,
-        isQualified: vRatio >= vRef && maData.isSqueezing && isBreakout,
+        isQualified: vRatio >= vRef && maData.isSqueezing && isBreakout && isBullish,
         score,
         comprehensiveScoreDetails: {
             volumeScore: parseFloat(volumeScore.toFixed(2)),
             maScore: parseFloat(maScore.toFixed(2)),
             chipScore: parseFloat(instScore.toFixed(2)),
-            total: parseFloat(totalPoints.toFixed(2))
+            total: parseFloat(totalPoints.toFixed(2)),
+            note: 'partial_engine_score' as const
         }
     };
 }

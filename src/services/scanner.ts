@@ -34,6 +34,36 @@ function normalizeDate(dateStr: string): string {
     return dateStr;
 }
 
+/**
+ * Normalize monthly revenue date to "YYYY-MM" format
+ * Handles:
+ *   - ISO month:   "2025-01"      → "2025-01"
+ *   - ROC month:   "114/01"       → "2025-01"  (民國 114 + 1911 = 2025)
+ *   - ROC full:    "114/01/01"    → "2025-01"
+ *   - ISO full:    "2025-01-15"   → "2025-01"
+ */
+function normalizeMonthlyDate(dateStr: string): string {
+    if (!dateStr) return '';
+    const s = dateStr.trim();
+
+    // ISO YYYY-MM (e.g. "2025-01")
+    if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+    // ISO YYYY-MM-DD (e.g. "2025-01-15")
+    const isoFull = s.match(/^(\d{4})-(\d{2})-\d{2}$/);
+    if (isoFull) return `${isoFull[1]}-${isoFull[2]}`;
+
+    // ROC RRR/MM or RRR/MM/DD (e.g. "114/01" or "114/01/01", 民國年)
+    const rocMatch = s.match(/^(\d{2,3})\/(\d{1,2})(?:\/\d{1,2})?$/);
+    if (rocMatch) {
+        const gregorianYear = parseInt(rocMatch[1]) + 1911; // 民國年 + 1911 = 西元年
+        const month = rocMatch[2].padStart(2, '0');
+        return `${gregorianYear}-${month}`;
+    }
+
+    console.warn(`[normalizeMonthlyDate] Unrecognized monthly date format: ${dateStr}`);
+    return s;
+}
 export const ScannerService = {
     /**
      * Stage 1: Discovery (兩階段篩選 - 避免超時)
@@ -67,11 +97,11 @@ export const ScannerService = {
 
         console.log(`[Scanner] Phase 1: Snapshot fetched - ${snapshot.length} stocks in ${t1 - t0}ms`);
 
-        // 預篩選：成交量 > 2000 且紅 K 線
+        // 預篩選優化：調降成交量門檻至 1000 股，並按成交量排序
         const preFiltered = snapshot
-            .filter(s => s.Trading_Volume > 2000 && s.close > s.open)
+            .filter(s => s.Trading_Volume > 1000 && s.close > s.open)
             .sort((a, b) => b.Trading_Volume - a.Trading_Volume)
-            .slice(0, 200); // 只取前 200 名，避免超時
+            .slice(0, 200);
 
         const t2 = Date.now();
         console.log(`[Scanner] Phase 1: Pre-filtered to ${preFiltered.length} candidates in ${t2 - t1}ms`);
@@ -112,16 +142,15 @@ export const ScannerService = {
                         const breakoutThreshold = (settings?.breakoutPercent || 3.0) / 100;
 
                         const maData = checkMaConstrict(ma5, ma20, squeezeThreshold);
+                        const isBullish = ma5 > ma20;
                         const today = history[history.length - 1];
                         const prevClose = history[history.length - 2].close;
-                        // FIXED: Use standard daily change (vs prev close) instead of Day High/Low or Open/Close
                         const changePercent = (today.close - prevClose) / prevClose;
-                        // const dailyChange = (today.close - today.open) / today.open; // Deprecated
 
                         const isBreakout = today.close > Math.max(ma5, ma20) && changePercent >= breakoutThreshold;
 
                         // 三大信號共振（參考傳入設定或預設值）
-                        if (vRatio >= volThreshold && maData.isSqueezing && isBreakout) {
+                        if (vRatio >= volThreshold && maData.isSqueezing && isBreakout && isBullish) {
                             console.log(`[Scanner] ✓ Found: ${stock.stock_id} ${stock.stock_name} - V:${vRatio.toFixed(1)}x, MA:${(maData.constrictValue * 100).toFixed(1)}%, Break:${(changePercent * 100).toFixed(1)}%`);
 
                             const result: AnalysisResult = {
@@ -129,11 +158,12 @@ export const ScannerService = {
                                 stock_name: stock.stock_name,
                                 sector_name: industryMapping[stock.stock_id.trim()] || '其他',
                                 close: today.close,
-                                change_percent: (today.close - history[history.length - 2].close) / history[history.length - 2].close,
-                                score: 0,
+                                change_percent: changePercent,
+                                score: 0, // Placeholder
                                 v_ratio: parseFloat(vRatio.toFixed(2)),
                                 is_ma_aligned: maData.isSqueezing,
                                 is_ma_breakout: isBreakout,
+                                is_bullish: isBullish,
                                 consecutive_buy: 0,
                                 poc: today.close,
                                 verdict: '三大信號共振 - 爆發前兆',
@@ -141,7 +171,14 @@ export const ScannerService = {
                                 dailyVolumeTrend: volumes.slice(-10),
                                 maConstrictValue: maData.constrictValue,
                                 today_volume: today.Trading_Volume,
-                                volumeIncreasing: checkVolumeIncreasing(volumes)
+                                volumeIncreasing: checkVolumeIncreasing(volumes),
+                                warnings: [],
+                                comprehensiveScoreDetails: {
+                                    volumeScore: 0,
+                                    maScore: 0,
+                                    chipScore: 0,
+                                    total: 0
+                                }
                             };
                             return result;
                         }
@@ -238,6 +275,7 @@ export const ScannerService = {
      * Optimized with Redis Raw Data Caching
      */
     analyzeStock: async (stockId: string, settings?: { volumeRatio: number, maConstrict: number, breakoutPercent: number }, stockName?: string): Promise<AnalysisResult | null> => {
+        const warnings: string[] = [];
         try {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
             const redis = (await import('@/lib/redis')).redis;
@@ -258,9 +296,9 @@ export const ScannerService = {
                 } catch (e) {
                     console.warn(`[Analyze] FinMind price failed for ${stockId}, fallback to Exchange...`);
                 }
-                // Fallback to Exchange if FinMind returned insufficient data
                 if (prices.length < 25) {
                     console.warn(`[Analyze] FinMind returned insufficient data (${prices.length} days) for ${stockId}, using Exchange fallback...`);
+                    warnings.push('Price data fallback to secondary source');
                     try {
                         prices = await ExchangeClient.getStockHistory(stockId);
                     } catch (e) {
@@ -272,6 +310,7 @@ export const ScannerService = {
                 }
             }
 
+            // 1. Fetch Prices already done in analyzeStock entry logic or within this try block
             // 2. Fetch Institutional Flow (Cache: 4h)
             let insts: any[] = [];
             const instCacheKey = `tsbs:raw:inst:${stockId}:${todayStr}`;
@@ -290,7 +329,10 @@ export const ScannerService = {
                     if (insts.length > 0) {
                         try { await redis.set(instCacheKey, JSON.stringify(insts), 'EX', 14400); } catch (e) { }
                     }
-                } catch (e) { console.warn(`[Analyze] Inst fetch failed for ${stockId}`); }
+                } catch (e) {
+                    console.warn(`[Analyze] Inst fetch failed for ${stockId}`);
+                    warnings.push('Missing institutional flow data (FinMind error)');
+                }
             }
 
             // 3. Fetch Monthly Revenue (Cache: 12h)
@@ -308,10 +350,13 @@ export const ScannerService = {
                     if (rev.length > 0) {
                         try { await redis.set(revCacheKey, JSON.stringify(rev), 'EX', 43200); } catch (e) { }
                     }
-                } catch (e) { console.warn(`[Analyze] Revenue fetch failed for ${stockId}`); }
+                } catch (e) {
+                    console.warn(`[Analyze] Revenue fetch failed for ${stockId}`);
+                    warnings.push('Monthly revenue data unavailable');
+                }
             }
 
-            // 2.5 Fetch Margin Trading Data (Cache: 4h)
+            // 4. Fetch Margin Trading Data (Cache: 4h)
             let marginData: any[] = [];
             const marginCacheKey = `tsbs:raw:margin:${stockId}:${todayStr}`;
             try {
@@ -337,7 +382,7 @@ export const ScannerService = {
                 return null;
             }
 
-            // Load industry mapping (cached in exchange client usually, but here we can just use the memory map)
+            // Load industry mapping
             const industryMapping = await ExchangeClient.getIndustryMapping();
 
             const result = evaluateStock(prices, settings);
@@ -370,13 +415,17 @@ export const ScannerService = {
             // Fundamental check
             let revenueSupport = false;
             let revenueBonusPoints = 0;
+            let isRevenueNewHigh = false;
             try {
                 if (Array.isArray(rev) && rev.length >= 2) {
                     const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
+
+                    // 使用 normalizeMonthlyDate 統一轉換（支援 YYYY-MM、YYYY-MM-DD、民國RRR/MM）
                     const normalized = rev.map((r: any) => ({
                         ...r,
-                        date: r.date.includes('/') ? normalizeAnyDate(r.date) : r.date
-                    }));
+                        date: normalizeMonthlyDate(r.date)
+                    })).filter((r: any) => r.date); // 過濾掉無效日期
+
                     const sorted = [...normalized].sort((a: any, b: any) => a.date.localeCompare(b.date));
                     const latest = sorted[sorted.length - 1];
                     const latestRev = Number(getRevenue(latest)) || 0;
@@ -396,29 +445,35 @@ export const ScannerService = {
 
                     let yoyScore = 0;
                     if (sorted.length >= 13) {
-                        const dt = new Date(latest.date);
-                        const prevYear = new Date(dt.getFullYear() - 1, dt.getMonth(), dt.getDate());
-                        const yearKey = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, '0')}`;
-                        const match = sorted.find((r: any) => r.date.startsWith(yearKey));
-                        if (match) {
-                            const revYear = Number(getRevenue(match)) || 0;
-                            const yoy = revYear > 0 ? (latestRev - revYear) / revYear : 0;
-                            yoyScore = Math.max(0, Math.min(1, yoy / 0.2));
+                        // 直接解析 "YYYY-MM" 字串，避免 new Date() 跨平台解析問題
+                        const latestDateNorm = normalizeMonthlyDate(latest.date);
+                        const parts = latestDateNorm.split('-');
+                        const latestYear = parseInt(parts[0]);
+                        const latestMonth = parseInt(parts[1]);
+                        if (latestYear && latestMonth) {
+                            const prevYearNum = latestYear - 1;
+                            const yearKey = `${prevYearNum}-${String(latestMonth).padStart(2, '0')}`;
+                            const match = sorted.find((r: any) => normalizeMonthlyDate(r.date).startsWith(yearKey));
+                            if (match) {
+                                const revYear = Number(getRevenue(match)) || 0;
+                                const yoy = revYear > 0 ? (latestRev - revYear) / revYear : 0;
+                                yoyScore = Math.max(0, Math.min(1, yoy / 0.2));
+                            }
                         }
                     }
 
                     // 新高判斷：最新營收是否為近 6 個月最高
-                    let isRevenueNewHigh = false;
                     if (sorted.length >= 6) {
                         const recent6 = sorted.slice(-6).map((r: any) => Number(getRevenue(r)) || 0);
                         isRevenueNewHigh = latestRev >= Math.max(...recent6) && latestRev > 0;
-                        if (isRevenueNewHigh) revenueBonusPoints += 3; // 額外加分
                     }
 
                     revenueBonusPoints = Math.round((momScore * 5 + yoyScore * 5 + (isRevenueNewHigh ? 3 : 0)) * 100) / 100;
                     revenueSupport = revenueBonusPoints > 0.5;
                 }
-            } catch (e) { }
+            } catch (e) {
+                warnings.push('Monthly revenue analysis unsuccessful');
+            }
 
             // Analyze margin squeeze signal
             const marginSignal = checkMarginSqueezeSignal(marginData, prices);
@@ -427,18 +482,6 @@ export const ScannerService = {
             // Analyze gap-up
             const prevDay = prices[prices.length - 2];
             const gapResult = checkGapUp(today.min, prevDay.max);
-
-            // Detect revenue new high from revenue analysis
-            let isRevenueNewHigh = false;
-            try {
-                if (Array.isArray(rev) && rev.length >= 6) {
-                    const getRevenue = (r: any) => r.revenue || r.monthly_revenue || r.MonthlyRevenue || r['營業收入'] || r['Revenue'] || 0;
-                    const sorted = [...rev].sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
-                    const latestRev = Number(getRevenue(sorted[sorted.length - 1])) || 0;
-                    const recent6 = sorted.slice(-6).map((r: any) => Number(getRevenue(r)) || 0);
-                    isRevenueNewHigh = latestRev >= Math.max(...recent6) && latestRev > 0;
-                }
-            } catch (e) { }
 
             // Recompute comprehensive score (5 dimensions: Vol 30, MA 22, Chip 22, Margin 11, Fundamental 15)
             const engineDetails = result.comprehensiveScoreDetails || { volumeScore: 0, maScore: 0, chipScore: 0, total: 0 };
@@ -466,17 +509,19 @@ export const ScannerService = {
             return {
                 stock_id: stockId,
                 stock_name: stockName || today.stock_name || stockId,
-                sector_name: industryMapping[stockId.trim()] || '其他',
+                sector_name: (industryMapping as Record<string, string>)[stockId.trim()] || '其他',
                 close: today.close,
                 change_percent: result.changePercent,
                 score: finalScore,
                 v_ratio: result.vRatio,
                 is_ma_aligned: result.maData.isSqueezing,
                 is_ma_breakout: result.isBreakout,
+                is_bullish: result.is_bullish,
                 consecutive_buy: consecutiveBuy,
                 poc: today.close,
-                verdict: finalScore >= 0.6 ? '高概率爆發候選' : ((result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold) ? '三大信號共振 - 爆發前兆' : '分析完成'),
+                verdict: warnings.length > 1 ? `分析受限: ${warnings.join(', ')}` : (finalScore >= 0.6 ? '高概率爆發候選' : ((result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold) ? '三大信號共振 - 爆發前兆' : '分析完成')),
                 tags,
+                warnings,
                 history: prices,
                 maConstrictValue: result.maData.constrictValue,
                 today_volume: today.Trading_Volume,
@@ -494,15 +539,15 @@ export const ScannerService = {
                     fundamentalBonus: parseFloat(normalizedFundamentalBonus.toFixed(2)),
                     total: parseFloat(totalPoints.toFixed(2))
                 },
-                is_recommended: finalScore >= 0.6 || (result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold),
+                is_recommended: (finalScore >= 0.6 || (result.vRatio >= volThreshold && result.maData.constrictValue <= squeezeThreshold && result.changePercent >= breakoutThreshold)) && result.is_bullish,
                 analysisHints: {
-                    technicalSignals: `V-Ratio 升至 ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線高度糾結' : ''}${gapResult.isGapUp ? ` • 跳空缺口 ${(gapResult.gapPercent * 100).toFixed(1)}%` : ''} • 量能激增`,
-                    chipSignals: `機構連買 ${consecutiveBuy} 日 • 籌碼集中度高`,
-                    fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分${isRevenueNewHigh ? ' • 創近6月新高' : ''} • 基本面支撐` : '營收成長動能待觀察',
-                    marginSignals: marginSignal.hasSignal ? `融資溫和增加 • 軋空動能醞釀中` : '無融資軋空信號',
-                    technical: gapResult.isGapUp ? `跳空缺口 ${(gapResult.gapPercent * 100).toFixed(1)}%` : (result.isBreakout ? '帶量突破' : (result.maData.isSqueezing ? '均線糾結待突破' : '無明顯技術信號')),
-                    chips: consecutiveBuy >= 3 ? `投信連買 ${consecutiveBuy} 天` : '無投信連買',
-                    fundamental: revenueSupport ? (isRevenueNewHigh ? '月營收連三月成長 • 創近6月新高' : '月營收連三月成長') : '營收未明顯支撐'
+                    technicalSignals: `V-Ratio ${result.vRatio.toFixed(1)}x${result.maData.isSqueezing ? ' • 均線糾結' : ''}${result.is_bullish ? ' • 多頭排列' : ' • 空頭慣性'}`,
+                    chipSignals: consecutiveBuy > 0 ? `法人連買 ${consecutiveBuy} 日` : '籌碼動能待轉強',
+                    fundamentalSignals: revenueBonusPoints > 0 ? `營收環比+${revenueBonusPoints.toFixed(1)}分 • 有所支撐` : '基本面動能略顯平淡',
+                    marginSignals: marginSignal.hasSignal ? `資增價漲 • 具備軋空動能` : '無融資軋空跡象',
+                    technical: gapResult.isGapUp ? '向上跳空' : (result.is_bullish ? '底部墊高' : '低檔盤整'),
+                    chips: consecutiveBuy >= 3 ? '投信密集佈局' : '量縮震盪',
+                    fundamental: revenueSupport ? '營收趨勢向上' : '數據待觀察'
                 }
             };
         } catch (error: any) {

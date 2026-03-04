@@ -38,6 +38,7 @@ export interface AnalysisResult {
     v_ratio: number;           // Volume / MA20_Volume
     is_ma_aligned: boolean;    // MA5/10/20 squeezed
     is_ma_breakout: boolean;   // Price > Max(MA)
+    is_bullish: boolean;      // MA5 > MA20 (Bullish Arrangement)
     consecutive_buy: number;   // Investment Trust buy streak
 
     // Expert System
@@ -59,6 +60,7 @@ export interface AnalysisResult {
         riskRewardRatio: number;
     };
     riskWarning?: string;        // e.g. "Price below 5MA"
+    warnings?: string[];         // Data integrity or logic warnings (e.g. "Missing Chip Data")
     comprehensiveScoreDetails?: {
         volumeScore: number;
         maScore: number;
