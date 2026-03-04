@@ -1,12 +1,11 @@
 'use client';
 
 import { StockCard } from '@/components/dashboard/StockCard';
-import { AnalysisResult, StockData } from '@/types';
+import { AnalysisResult, StockData, HistorySession } from '@/types';
 import { SECTORS, MarketType, MARKET_NAMES } from '@/lib/sectors';
 import { StockSearch } from '@/components/dashboard/StockSearch';
-import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info, BookOpen, X, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Search, TrendingUp, Sparkles, Filter, Loader2, Flame, Settings, Target, BarChart3, Info, BookOpen, X, HelpCircle, AlertTriangle, History, Trash2, Calendar } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
-import Link from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
 
@@ -37,6 +36,20 @@ export default function DashboardPage() {
   const [hasScanned, setHasScanned] = useState(false);
   const [isAnalyzingSingle, setIsAnalyzingSingle] = useState(false); // 新增單股分析狀態
   const [showManual, setShowManual] = useState(false); // 新增使用說明狀態
+  const [showHistory, setShowHistory] = useState(false); // 新增歷史紀錄狀態
+  const [historyRecords, setHistoryRecords] = useState<HistorySession[]>([]);
+
+  // 0. Load history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('tsbs_scan_history');
+    if (savedHistory) {
+      try {
+        setHistoryRecords(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error('Failed to load scan history:', e);
+      }
+    }
+  }, []);
 
   const [market, setMarket] = useState<MarketType>('TWSE');
   const [sector, setSector] = useState<string>('ALL');
@@ -285,6 +298,32 @@ export default function DashboardPage() {
         .sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0)); // Rank by potential breakout
 
       setResults(filteredResults);
+
+      // Save to History (Auto-save)
+      if (filteredResults.length > 0) {
+        const newSession: HistorySession = {
+          id: new Date().toISOString(),
+          date: new Intl.DateTimeFormat('zh-TW', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+          }).format(new Date()),
+          market,
+          sector: currentSectorName,
+          settings,
+          results: filteredResults.map(r => ({
+            ...r,
+            // Capture specific values at scan time
+            close: r.close,
+            potential_score: r.potential_score
+          }))
+        };
+
+        setHistoryRecords((prev: HistorySession[]) => {
+          const updated = [newSession, ...prev].slice(0, 50); // Keep last 50 sessions
+          localStorage.setItem('tsbs_scan_history', JSON.stringify(updated));
+          return updated;
+        });
+      }
+
       setTiming({
         snapshot: t1 - t0,
         analyze: t_end - t1,
@@ -332,6 +371,14 @@ export default function DashboardPage() {
         >
           <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
           使用說明 & 勝率分析
+        </button>
+
+        <button
+          onClick={() => setShowHistory(true)}
+          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-blue-500/50 transition-all text-amber-400 font-black mb-10 ml-4 group"
+        >
+          <History className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          歷史紀錄
         </button>
 
         <p className="text-slate-400 text-2xl font-black max-w-2xl mx-auto leading-relaxed">
@@ -694,6 +741,111 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 歷史紀錄 Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 sm:p-12">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => setShowHistory(false)}
+          />
+
+          {/* Modal Content */}
+          <div className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-[3rem] p-10 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <button
+              onClick={() => setShowHistory(false)}
+              className="absolute top-8 right-8 p-3 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                <History className="w-8 h-8 text-amber-400" />
+              </div>
+              <h2 className="text-4xl font-black text-white">過去掃描歷史</h2>
+            </div>
+
+            {historyRecords.length === 0 ? (
+              <div className="py-20 text-center opacity-50">
+                <Calendar className="w-16 h-16 mx-auto mb-4 text-slate-600" />
+                <p className="text-2xl font-black text-slate-400">目前沒有歷史紀錄</p>
+                <p className="text-slate-500 mt-2">完成掃描後將自動保存結果</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* 頻率統計邏輯 (計算所有紀錄中股票出現的次數) */}
+                {(() => {
+                  const frequency: Record<string, number> = {};
+                  historyRecords.forEach(session => {
+                    session.results.forEach(r => {
+                      frequency[r.stock_id] = (frequency[r.stock_id] || 0) + 1;
+                    });
+                  });
+
+                  return historyRecords.map((session) => (
+                    <div key={session.id} className="bg-slate-800/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
+                      <div className="p-6 bg-slate-800/60 border-b border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="px-4 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-black">
+                            {session.date}
+                          </div>
+                          <span className="text-slate-400 font-bold">{session.market} · {session.sector}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updated = historyRecords.filter(s => s.id !== session.id);
+                            setHistoryRecords(updated);
+                            localStorage.setItem('tsbs_scan_history', JSON.stringify(updated));
+                          }}
+                          className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors"
+                          title="刪除此紀錄"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="p-6 space-y-3">
+                        {session.results.sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0)).map((r) => (
+                          <div key={r.stock_id} className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5 hover:border-blue-500/30 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="flex flex-col">
+                                <span className="text-xl font-black text-white">{r.stock_id}</span>
+                                <span className="text-xs font-bold text-slate-500">{r.stock_name}</span>
+                              </div>
+                              {frequency[r.stock_id] > 1 && (
+                                <div className="px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-[10px] font-black text-blue-400">
+                                  出現 {frequency[r.stock_id]} 次
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-8">
+                              <div className="text-right">
+                                <div className="text-xs font-bold text-slate-500">當時價格</div>
+                                <div className="text-lg font-black text-white">${r.close}</div>
+                              </div>
+                              <div className="text-right w-16">
+                                <div className="text-xs font-bold text-slate-500">評分</div>
+                                <div className={clsx(
+                                  "text-xl font-black",
+                                  (r.potential_score || 0) >= 25 ? "text-amber-400" : "text-blue-400"
+                                )}>
+                                  {Math.round(r.potential_score || 0)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
           </div>
         </div>
       )}

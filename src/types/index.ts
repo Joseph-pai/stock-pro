@@ -100,3 +100,16 @@ export interface StockCandle {
     value?: number; // volume
     color?: string;
 }
+
+export interface HistorySession {
+    id: string; // ISO timestamp
+    date: string; // Display date
+    market: string;
+    sector: string;
+    settings: {
+        volumeRatio: number;
+        maConstrict: number;
+        breakoutPercent: number;
+    };
+    results: AnalysisResult[];
+}
