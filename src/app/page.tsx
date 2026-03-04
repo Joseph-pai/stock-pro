@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [showManual, setShowManual] = useState(false); // 新增使用說明狀態
   const [showHistory, setShowHistory] = useState(false); // 新增歷史紀錄狀態
   const [historyRecords, setHistoryRecords] = useState<HistorySession[]>([]);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
 
   // 0. Load history from localStorage
   useEffect(() => {
@@ -763,11 +764,27 @@ export default function DashboardPage() {
               <X className="w-6 h-6" />
             </button>
 
-            <div className="flex items-center gap-4 mb-8">
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-                <History className="w-8 h-8 text-amber-400" />
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                  <History className="w-8 h-8 text-amber-400" />
+                </div>
+                <h2 className="text-4xl font-black text-white">過去掃描歷史</h2>
               </div>
-              <h2 className="text-4xl font-black text-white">過去掃描歷史</h2>
+              {selectedSessionIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    const updated = historyRecords.filter(s => !selectedSessionIds.includes(s.id));
+                    setHistoryRecords(updated);
+                    localStorage.setItem('tsbs_scan_history', JSON.stringify(updated));
+                    setSelectedSessionIds([]);
+                  }}
+                  className="px-6 py-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-500 font-black hover:bg-rose-500 hover:text-white transition-all flex items-center gap-2"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  刪除選取 ({selectedSessionIds.length})
+                </button>
+              )}
             </div>
 
             {historyRecords.length === 0 ? (
@@ -788,13 +805,32 @@ export default function DashboardPage() {
                   });
 
                   return historyRecords.map((session) => (
-                    <div key={session.id} className="bg-slate-800/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
+                    <div key={session.id} className={clsx(
+                      "bg-slate-800/40 rounded-[2.5rem] border overflow-hidden transition-all",
+                      selectedSessionIds.includes(session.id) ? "border-rose-500/50 ring-1 ring-rose-500/20" : "border-white/5"
+                    )}>
                       <div className="p-6 bg-slate-800/60 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="px-4 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-black">
-                            {session.date}
+                        <div className="flex items-center gap-6">
+                          <label className="relative flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedSessionIds.includes(session.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSessionIds(prev => [...prev, session.id]);
+                                } else {
+                                  setSelectedSessionIds(prev => prev.filter(id => id !== session.id));
+                                }
+                              }}
+                              className="w-6 h-6 rounded-lg bg-slate-900 border-white/10 checked:bg-amber-500 transition-all cursor-pointer"
+                            />
+                          </label>
+                          <div className="flex items-center gap-4">
+                            <div className="px-4 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-black">
+                              {session.date}
+                            </div>
+                            <span className="text-slate-400 font-bold">{session.market} · {session.sector}</span>
                           </div>
-                          <span className="text-slate-400 font-bold">{session.market} · {session.sector}</span>
                         </div>
                         <button
                           onClick={() => {
@@ -809,34 +845,67 @@ export default function DashboardPage() {
                         </button>
                       </div>
 
-                      <div className="p-6 space-y-3">
-                        {session.results.sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0)).map((r) => (
-                          <div key={r.stock_id} className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5 hover:border-blue-500/30 transition-all">
-                            <div className="flex items-center gap-4">
-                              <div className="flex flex-col">
-                                <span className="text-xl font-black text-white">{r.stock_id}</span>
-                                <span className="text-xs font-bold text-slate-500">{r.stock_name}</span>
-                              </div>
-                              {frequency[r.stock_id] > 1 && (
-                                <div className="px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-[10px] font-black text-blue-400">
-                                  出現 {frequency[r.stock_id]} 次
+                      <div className="p-6 space-y-4">
+                        {session.results.sort((a, b) => (b.potential_score || 0) - (a.potential_score || 0)).map((r, idx) => (
+                          <div key={r.stock_id} className="flex flex-col gap-3 p-5 bg-black/20 rounded-3xl border border-white/5 hover:border-blue-500/30 transition-all">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <span className="text-slate-600 font-black text-lg">#{idx + 1}</span>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-2xl font-black text-white">{r.stock_id}</span>
+                                    <span className="text-lg font-bold text-slate-400">{r.stock_name}</span>
+                                    {frequency[r.stock_id] > 1 && (
+                                      <span className="px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-[10px] font-black text-blue-400">
+                                        出現 {frequency[r.stock_id]} 次
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-white/5">{r.sector_name || session.sector}</span>
+                                  </div>
                                 </div>
-                              )}
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <div className="text-right">
+                                  <div className="text-xs font-bold text-slate-500">當時現價</div>
+                                  <div className="text-2xl font-black text-white">${r.close}</div>
+                                  <div className={clsx(
+                                    "text-sm font-black",
+                                    (r.change_percent || 0) > 0 ? "text-rose-500" : (r.change_percent || 0) < 0 ? "text-emerald-500" : "text-slate-400"
+                                  )}>
+                                    {(r.change_percent || 0) > 0 ? "+" : ""}{(r.change_percent || 0).toFixed(2)}%
+                                  </div>
+                                </div>
+                                <div className="text-right w-20">
+                                  <div className="text-xs font-bold text-slate-500">爆發評分</div>
+                                  <div className={clsx(
+                                    "text-3xl font-black",
+                                    (r.potential_score || 0) >= 25 ? "text-amber-400" : "text-blue-400"
+                                  )}>
+                                    {Math.round(r.potential_score || 0)}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-8">
-                              <div className="text-right">
-                                <div className="text-xs font-bold text-slate-500">當時價格</div>
-                                <div className="text-lg font-black text-white">${r.close}</div>
-                              </div>
-                              <div className="text-right w-16">
-                                <div className="text-xs font-bold text-slate-500">評分</div>
-                                <div className={clsx(
-                                  "text-xl font-black",
-                                  (r.potential_score || 0) >= 25 ? "text-amber-400" : "text-blue-400"
-                                )}>
-                                  {Math.round(r.potential_score || 0)}
-                                </div>
-                              </div>
+
+                            {/* 技術標籤 */}
+                            <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                              {r.v_ratio > 2 && (
+                                <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-[10px] font-black text-rose-400">量能激增</span>
+                              )}
+                              {r.is_ma_breakout && (
+                                <span className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] font-black text-blue-400">帶量突破</span>
+                              )}
+                              {r.is_ma_aligned && (
+                                <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black text-emerald-400">均線糾結</span>
+                              )}
+                              {r.consecutive_buy > 0 && (
+                                <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] font-black text-amber-400">投信連續買超</span>
+                              )}
+                              {r.is_bullish && (
+                                <span className="px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-[10px] font-black text-purple-400">多頭排列</span>
+                              )}
                             </div>
                           </div>
                         ))}
